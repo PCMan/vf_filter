@@ -24,6 +24,7 @@ from ctypes import *
 import numpy as np
 import wfdb
 import matplotlib.pyplot as plt 
+from sklearn.cluster import KMeans
 
 if __name__ == "__main__":
     record_name = "mitdb/108"
@@ -33,7 +34,7 @@ if __name__ == "__main__":
     lead2 = []
     v5 = []
     if wfdb.isigopen(record_name, byref(s), 2) == 2:
-        for i in range(10000):
+        for i in range(1000):
             if wfdb.getvec(byref(v)) < 0:
                 break
             lead2.append(v[0])
@@ -59,9 +60,31 @@ if __name__ == "__main__":
 
     plt.plot(lead2)
     plt.plot(v5)
+
+    first_beat = 0
+    last_beat = -1
+    beats = []
     for x, code in anns:
         if x >= len(lead2):
             break
         y = max(lead2[x], v5[x]) + 10
         plt.annotate(wfdb.annstr(code), xy=(x, y))
+        if code == wfdb.NORMAL:
+            if last_beat >= 0:
+                beats.append(v5[last_beat:x])
+            else:
+                first_beat = x
+            last_beat = x
+
+    beat = beats[0]
+    km = KMeans(20)
+    x_data = [x for x in zip(range(len(beat)), beat)]
+    km.fit(x_data)
+
+    km.cluster_centers_.sort(axis=0)
+    print km.cluster_centers_
+    x = [first_beat + row[0] for row in km.cluster_centers_]
+    y = [row[1] for row in km.cluster_centers_]
+    plt.plot(x, y, "o")
+
     plt.show()
