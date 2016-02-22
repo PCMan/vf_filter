@@ -17,7 +17,7 @@ def extact_doi_url(dblp_article_url):
     doi_url = ""
     r = requests.get(dblp_article_url)
     if r.text:
-        m = re.search(r'href="(http://dx.doi.org/[^"]+)"', text)
+        m = re.search(r'href="(http://dx.doi.org/[^"]+)"', r.text)
         if m:
             doi_url = m.group(1)
     return doi_url
