@@ -29,6 +29,7 @@ def query_research_gate_impact(journal):
     impact = 0
 
     # avoid calling google too often
+    global last_google_time
     delta_time = time.time() - last_google_time
     if delta_time < 2.0:
         time.sleep(2.0 - delta_time)
@@ -145,7 +146,7 @@ if __name__ == "__main__":
             name, impact = query_venue_info(venue, type_name)
             print(venue, "=>", name, ": ", impact)
             venue_info[venue] = (name, impact)
-            time.sleep(1.0)
+            time.sleep(0.5)
 
         f = open("dblp_{0}_{1}_{2}.csv".format(type_name, begin_year, end_year), "w")
         f.write('"year","title","venue","url","freq","IF","name"\n')
