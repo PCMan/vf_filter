@@ -36,6 +36,7 @@ def load_record(db_name, record, sample_rate=None):
             # If setifreq has been used to modify the input sampling rate, getvec resamples the input signals at the
             # desired rate, using linear interpolation between the pair of samples nearest in time to that of the
             # sample to be returned.
+            # FIXME: avoid using it now since wfdb resample seems to break time of annotations. :-(
             wfdb.setifreq(wfdb.WFDB_Frequency(sample_rate))
 
         while wfdb.getvec(byref(sample_buf)) > 0:
@@ -66,7 +67,7 @@ def load_record(db_name, record, sample_rate=None):
     return signals, annotations
 
 
-def find_vf_episodes(annotations):
+def find_vf_episodes(annotations, n_samples):
     episodes = []
     vf_begin = -1
     for (ann_time, code, rhythm_type) in annotations:
@@ -79,8 +80,7 @@ def find_vf_episodes(annotations):
             if code == "[" or rhythm_type.startswith("(V"):
                 vf_begin = ann_time
     if vf_begin > 0:
-        vf_end = annotations[-1][0]
-        episodes.append((vf_begin, vf_end))
+        episodes.append((vf_begin, n_samples))
 
     return episodes
 
@@ -94,8 +94,8 @@ if __name__ == "__main__":
         for record in get_records(db_name):
             print "READ SIGNAL:", db_name, record
             # resample to 250 Hz for all signals
-            signals, annotations = load_record(db_name, record, sample_rate=250.0)
+            signals, annotations = load_record(db_name, record)
             print "  # of samples:", len(signals), ", # of anns:", len(annotations)
-            print "vf episodes:", find_vf_episodes(annotations)
+            print "vf episodes:", find_vf_episodes(annotations, n_samples=len(signals))
 
     wfdb.wfdbquit()
