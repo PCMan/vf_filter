@@ -55,23 +55,47 @@ def load_record(db_name, record, sample_rate=None):
         while wfdb.getann(0, byref(ann_buf)) == 0:
             ann = ann_buf[0]  # we only want the first channel
             ann_code = ord(ann.anntyp)
-            rhythm_type = None
+            rhythm_type = ""
             if ann.aux:
                 # the first byte of aux is the length of the string
                 aux_ptr = cast(ann.aux, c_void_p).value + 1  # skip the first byte
                 rhythm_type = cast(aux_ptr, c_char_p).value
             # print ann.time, wfdb.anndesc(ann_code), wfdb.annstr(ann_code), rhythm_type
-            annotations.append((ann.time, ann_code, rhythm_type))
+            annotations.append((ann.time, wfdb.annstr(ann_code), rhythm_type))
 
     return signals, annotations
 
 
+def find_vf_episodes(annotations):
+    episodes = []
+    vf_begin = -1
+    for (ann_time, code, rhythm_type) in annotations:
+        if vf_begin > 0:  # current rhythm is Vf
+            if code == "]" or not rhythm_type.startswith("(V"):
+                vf_end = ann_time
+                episodes.append((vf_begin, vf_end))
+                vf_begin = -1
+        else:  # no Vf
+            if code == "[" or rhythm_type.startswith("(V"):
+                vf_begin = ann_time
+    if vf_begin > 0:
+        vf_end = annotations[-1][0]
+        episodes.append((vf_begin, vf_end))
+
+    return episodes
+
+
 if __name__ == "__main__":
     # mitdb and vfdb contain two channels, but we only use the first one here
+    # data source sampling rate:
+    # mitdb: 360 Hz
+    # vfdb, cudb: 250 Hz
     for db_name in ("mitdb", "vfdb", "cudb"):
         for record in get_records(db_name):
             print "READ SIGNAL:", db_name, record
+            # resample to 250 Hz for all signals
             signals, annotations = load_record(db_name, record, sample_rate=250.0)
             print "  # of samples:", len(signals), ", # of anns:", len(annotations)
+            print "vf episodes:", find_vf_episodes(annotations)
 
     wfdb.wfdbquit()
