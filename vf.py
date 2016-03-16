@@ -2,59 +2,66 @@
 
 from ctypes import *
 import numpy as np
+import os
 import wfdb
 import matplotlib.pyplot as plt 
 
-if __name__ == "__main__":
+
+# get name of records from a database
+def get_records(name):
     records = []
-    with open("/home/pcman/database/vfdb/RECORDS", "r") as f:
-        for line in f:
-            records.append(line.strip())
+    dirname = os.path.expanduser("~/database/{0}".format(name))
+    for name in os.listdir(dirname):
+        if name.endswith(".dat"):
+            record = os.path.splitext(name)[0]
+            records.append(record)
+    records.sort()
+    return records
 
-    for record in records:
-        record_name = "vfdb/{0}".format(record)
 
-        s = (wfdb.WFDB_Siginfo  * 2)()
-        v = (wfdb.WFDB_Sample * 2)()
-        lead2 = []
-        v5 = []
-        if wfdb.isigopen(record_name, byref(s), 2) == 2:
-            for i in range(10000):
-                if wfdb.getvec(byref(v)) < 0:
-                    break
-                lead2.append(v[0])
-                v5.append(v[1])
-        lead2 = np.array(lead2)
-        v5 = np.array(v5)
+if __name__ == "__main__":
+    # mitdb and vfdb contain two channels, but we only use the first one here
+    for db_name in ("mitdb", "vfdb", "cudb"):
+        for record in get_records(db_name):
+            record_name = "{0}/{1}".format(db_name, record)
+            print "READ SIGNAL:", record_name
 
-        anns= []
-        ann_name = wfdb.String("atr")
-        ann_info = (wfdb.WFDB_Anninfo * 2)()
-        ann_info[0].name = ann_name
-        ann_info[0].stat = wfdb.WFDB_READ
-        ann_info[1].name = ann_name
-        ann_info[1].stat = wfdb.WFDB_READ
-        if wfdb.annopen(record_name, byref(ann_info), 2) == 0:
-            ann = wfdb.WFDB_Annotation()
-            for i in range(30):
-                if wfdb.getann(0, byref(ann)) < 0:
-                    break
-                ann_code = ord(ann.anntyp)
+            # query number of channels in this record
+            n_channels = wfdb.isigopen(record_name, None, 0)
 
-                # the first byte of aux is the length of the string
-                paux = cast(ann.aux, c_void_p).value + 1  # skip the first byte
-                rhythm_type = cast(paux, c_char_p).value
-                print ann.time, wfdb.anndesc(ann_code), wfdb.annstr(ann_code), rhythm_type
-
-                anns.append((ann.time, ann_code))
-
-        plt.plot(lead2)
-        plt.plot(v5)
-        for x, code in anns:
-            if x >= len(lead2):
-                break
-            y = max(lead2[x], v5[x]) + 10
-            plt.annotate(wfdb.annstr(code), xy=(x, y))
-        plt.show()
+            # read the signals
+            sigInfo = (wfdb.WFDB_Siginfo * n_channels)()
+            sample_buf = (wfdb.WFDB_Sample * n_channels)()
+            signals = []
+            if wfdb.isigopen(record_name, byref(sigInfo), n_channels) == n_channels:
+                while True:
+                    if wfdb.getvec(byref(sample_buf)) < 0:
+                        break
+                    sample = sample_buf[0]  # we only want the first channel
+                    signals.append(sample)
+            signals = np.array(signals)
+            print "  # of samples:", len(signals)
+            
+            # read annotations
+            annotations = []
+            ann_name = wfdb.String("atr")
+            ann_info = (wfdb.WFDB_Anninfo * n_channels)()
+            for item in ann_info:
+                item.name = ann_name
+                item.stat = wfdb.WFDB_READ
+            if wfdb.annopen(record_name, byref(ann_info), n_channels) == 0:
+                ann_buf = (wfdb.WFDB_Annotation * n_channels)()
+                for i in range(30):
+                    if wfdb.getann(0, byref(ann_buf)) < 0:
+                        break
+                    ann = ann_buf[0]  # we only want the first channel
+                    ann_code = ord(ann.anntyp)
+                    rhythm_type = None
+                    if ann.aux:
+                        # the first byte of aux is the length of the string
+                        aux_ptr = cast(ann.aux, c_void_p).value + 1  # skip the first byte
+                        rhythm_type = cast(aux_ptr, c_char_p).value
+                    print ann.time, wfdb.anndesc(ann_code), wfdb.annstr(ann_code), rhythm_type
+                    annotations.append((ann.time, ann_code, rhythm_type))
 
     wfdb.wfdbquit()
