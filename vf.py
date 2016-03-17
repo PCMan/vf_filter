@@ -2,6 +2,7 @@
 
 from ctypes import *
 import numpy as np
+import scipy.signal
 import os
 import wfdb
 import matplotlib.pyplot as plt 
@@ -17,6 +18,15 @@ def get_records(db_name):
             records.append(record)
     records.sort()
     return records
+
+
+class Segment:
+    def __init__(self):
+        self.record = ""
+        self.label = 0
+        self.signals = None
+        self.begin_time = 0
+        self.duration = 0
 
 
 class Record:
@@ -69,7 +79,7 @@ class Record:
         self.signals = signals
         self.annotations = annotations
 
-    def find_vf_episodes(self):
+    def get_vf_episodes(self):
         annotations = self.annotations
         n_samples = len(self.signals)
         episodes = []
@@ -88,6 +98,43 @@ class Record:
 
         return episodes
 
+    def get_total_time(self):
+        return len(self.signals) / self.sample_rate
+
+    # perform segmentation
+    def get_segments(self, duration=8.0):
+        n_samples = len(self.signals)
+        segment_size = int(self.sample_rate * duration)
+        n_segments = int(np.floor(n_samples / segment_size))
+        segments = []
+        labels = []
+        # segments = np.split(self.signals[0:segment_size * n_segments], n_segments)
+
+        vf_episodes = self.get_vf_episodes()
+        n_episodes = len(vf_episodes)
+        current_episode = 0
+        for i in range(n_segments):
+            # split the segment
+            segment_begin = i * segment_size
+            segment_end = segment_begin + segment_size
+            segment = self.signals[segment_begin:segment_size]
+            segments.append(segment)
+
+            # try to label the segment
+            has_vf = 0
+            if current_episode < n_episodes:
+                (vf_begin, vf_end) = vf_episodes[current_episode]
+                if vf_begin <= segment_begin <= vf_end:
+                    has_vf = 1
+                elif vf_begin <= segment_end <= vf_end:
+                    has_vf = 1
+                elif vf_begin >= segment_begin and vf_end <= segment_end:
+                    has_vf = 1
+                if segment_end >= vf_end:
+                    current_episode += 1
+            labels.append(has_vf)
+        return np.array(segments), np.array(labels)
+
 
 if __name__ == "__main__":
     # mitdb and vfdb contain two channels, but we only use the first one here
@@ -96,12 +143,21 @@ if __name__ == "__main__":
     # vfdb, cudb: 250 Hz
     for db_name in ("mitdb", "vfdb", "cudb"):
         for record_name in get_records(db_name):
-            print "READ SIGNAL:", db_name, record_name
+            print "read record:", db_name, record_name
             record = Record()
             record.load(db_name, record_name)
 
-            # resample to 250 Hz for all signals
-            print "sample rate:", record.sample_rate, "# of samples:", len(record.signals), ", # of anns:", len(record.annotations)
-            print "vf episodes:", record.find_vf_episodes()
+            print "  sample rate:", record.sample_rate, "# of samples:", len(record.signals), ", # of anns:", len(record.annotations)
+            # print "  vf episodes:", record.get_vf_episodes()
+
+            segments, labels = record.get_segments(8)
+            '''
+            # resample to 250 Hz
+            for i in range(len(segments)):
+                segment = segments[i]
+                segments[i] = scipy.signal.resample(segment, 250 * 8)
+            '''
+            print "  segments:", len(segments), ", segment size:", len(segments[0])
+            print "  # of vf segments (label=1):", np.sum(labels)
 
     wfdb.wfdbquit()
