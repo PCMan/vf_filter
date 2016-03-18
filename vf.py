@@ -108,7 +108,6 @@ class Record:
         n_segments = int(np.floor(n_samples / segment_size))
         segments = []
         labels = []
-        # segments = np.split(self.signals[0:segment_size * n_segments], n_segments)
 
         vf_episodes = self.get_vf_episodes()
         n_episodes = len(vf_episodes)
@@ -117,12 +116,13 @@ class Record:
             # split the segment
             segment_begin = i * segment_size
             segment_end = segment_begin + segment_size
-            segment = self.signals[segment_begin:segment_size]
+            segment = self.signals[segment_begin:segment_end]
             segments.append(segment)
 
             # try to label the segment
             has_vf = 0
             if current_episode < n_episodes:
+                # check if the segment is overlapped with the current Vf episode
                 (vf_begin, vf_end) = vf_episodes[current_episode]
                 if vf_begin <= segment_begin <= vf_end:
                     has_vf = 1
@@ -136,11 +136,13 @@ class Record:
         return np.array(segments), np.array(labels)
 
 
-if __name__ == "__main__":
+def main():
     # mitdb and vfdb contain two channels, but we only use the first one here
     # data source sampling rate:
     # mitdb: 360 Hz
     # vfdb, cudb: 250 Hz
+    all_segments = []
+    all_labels = []
     for db_name in ("mitdb", "vfdb", "cudb"):
         for record_name in get_records(db_name):
             print "read record:", db_name, record_name
@@ -160,4 +162,16 @@ if __name__ == "__main__":
             print "  segments:", len(segments), ", segment size:", len(segments[0])
             print "  # of vf segments (label=1):", np.sum(labels)
 
+            all_segments.extend(segments)
+            all_labels.extend(labels)
+            '''
+            for segment, has_vf in zip(segments, labels):
+                if has_vf:
+                    plt.plot(segment)
+                    plt.show()
+            '''
     wfdb.wfdbquit()
+    print "Summary:\n", "# of segments:", len(all_segments), "# of VT/Vf:", np.sum(all_labels)
+
+if __name__ == "__main__":
+    main()
