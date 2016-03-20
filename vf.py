@@ -6,6 +6,7 @@ import scipy.signal
 import os
 import wfdb
 import matplotlib.pyplot as plt 
+from vf_features import extract_features
 
 
 # get name of records from a database
@@ -141,6 +142,9 @@ def main():
     # data source sampling rate:
     # mitdb: 360 Hz
     # vfdb, cudb: 250 Hz
+    output = open("summary.csv", "w")
+    output.write('"db", "record", "vf", "non-vf"\n')
+    segment_duration = 8  # 8 sec per segment
     all_segments = []
     all_labels = []
     for db_name in ("mitdb", "vfdb", "cudb"):
@@ -150,19 +154,24 @@ def main():
             record.load(db_name, record_name)
 
             print "  sample rate:", record.sample_rate, "# of samples:", len(record.signals), ", # of anns:", len(record.annotations)
-            # print "  vf episodes:", record.get_vf_episodes()
 
-            segments, labels = record.get_segments(8)
-            '''
-            # resample to 250 Hz
-            for i in range(len(segments)):
-                segment = segments[i]
-                segments[i] = scipy.signal.resample(segment, 250 * 8)
-            '''
+            segments, labels = record.get_segments(segment_duration)
             print "  segments:", len(segments), ", segment size:", len(segments[0])
             print "  # of vf segments (label=1):", np.sum(labels)
 
-            all_segments.extend(segments)
+            n_vf = np.sum(labels)
+            n_non_vf = len(segments) - n_vf
+            output.write('"{0}","{1}",{2},{3}\n'.format(db_name, record_name, n_vf, n_non_vf))
+
+            for segment in segments:
+                # resample to 360 Hz as needed (mainly for cudb)
+                if record.sample_rate != 360:
+                    segment = scipy.signal.resample(segment, 360 * segment_duration)
+
+                # convert segment values to features
+                segment = extract_features(segment, sampling_rate=360)
+
+                all_segments.append((db_name, record_name, segment))
             all_labels.extend(labels)
             '''
             for segment, has_vf in zip(segments, labels):
@@ -172,6 +181,8 @@ def main():
             '''
     wfdb.wfdbquit()
     print "Summary:\n", "# of segments:", len(all_segments), "# of VT/Vf:", np.sum(all_labels)
+
+    output.close()
 
 if __name__ == "__main__":
     main()
