@@ -110,7 +110,7 @@ def extract_features(samples, sampling_rate):
 
     # band pass filter
     samples = butter_bandpass_filter(samples, 1, 30, sampling_rate)
-    
+
     features = []
     n_samples = len(samples)
     duration = int(n_samples / sampling_rate)
@@ -148,21 +148,33 @@ def extract_features(samples, sampling_rate):
 
     # Modified exponential (MEA)
 
-    # Mean absolute value (MAV) of 2-s segments
-    '''
-    pos = 0
-    mav = 0.0
-    window_size = 2 * sampling_rate
-    n_windows = int(n_samples / window_size)
-    while (pos + window_size) < n_samples:
-        window_samples = samples[pos : pos + window_size]
-        mav += np.mean(window_samples)
-    mav /= n_windows
-    features.append(mav)
-    '''
-
     # spectral parameters
     # -------------------------------------------------
+
+    # perform discrete Fourier transform
+    dft = np.fft.fft(samples)
+    fft_freq = np.fft.fftfreq(len(samples))
+
+    # calculate VF leaks
+    # find the central/peak frequency
+    # http://cinc.mit.edu/archives/2002/pdf/213.pdf
+    # T = (1/f) * sample_rate
+    peak_freq = dft[:len(dft)/2].argmax()
+    peak_freq = fft_freq[peak_freq] * sampling_rate
+    cycle = (1 / peak_freq) * sampling_rate  # in terms of samples
+    # print peak_freq, "Hz, cycle:", cycle
+
+    if cycle == np.inf:
+        cycle = len(samples)
+
+    vf_leak_numerator = 0.0
+    vf_leak_denominator = 0.0
+    half_cycle = int(cycle/2)
+    for i in range(half_cycle, len(samples)):
+        vf_leak_numerator += np.abs(samples[i] + samples[i - half_cycle])
+        vf_leak_denominator += np.abs(samples[i]) + np.abs(samples[i - half_cycle])
+    vf_leak = vf_leak_numerator / vf_leak_denominator
+    features.append(vf_leak)
 
     # complexity parameters
     # -------------------------------------------------

@@ -11,6 +11,8 @@ import pickle
 from sklearn import linear_model
 from sklearn import ensemble
 from sklearn import cross_validation
+from sklearn import metrics
+from multiprocessing import Pool
 
 
 # get name of records from a database
@@ -140,6 +142,8 @@ class Record:
             labels.append(has_vf)
         return np.array(segments), np.array(labels)
 
+def extract_features_job(s):
+    return extract_features(s[2], sampling_rate=360)
 
 def main():
     cache_file_name = "all_segments.dat"
@@ -203,25 +207,33 @@ def main():
 
     print "Summary:\n", "# of segments:", len(all_segments), "# of VT/Vf:", np.sum(all_labels)
 
+    # use multiprocessing for speed up.
     x_data = []
+    pool = Pool(6)
+    x_data = pool.map(extract_features_job, all_segments)
+    '''
     for db_name, record_name, segment in all_segments:
         # convert segment values to features
         x_data.append(extract_features(segment, sampling_rate=360))
+    '''
     x_data = np.array(x_data)
     y_data = np.array(all_labels)
+    print "features are extracted."
 
     x_train, x_test, y_train, y_test = cross_validation.train_test_split(x_data, y_data, test_size=0.2, random_state=107)
     estimator = linear_model.LogisticRegression()
     estimator.fit(x_train, y_train)
 
     y_predict = estimator.predict(x_test)
-    print "Logistic regression: error:", float(np.sum(y_predict != y_test) * 100) / len(y_test), "%"
+    # print "Logistic regression: error:", float(np.sum(y_predict != y_test) * 100) / len(y_test), "%"
+    print "Logistic regression: precision:", metrics.precision_score(y_test, y_predict), ", accuracy:", metrics.accuracy_score(y_test, y_predict)
 
     estimator = ensemble.RandomForestClassifier()
     estimator.fit(x_train, y_train)
 
     y_predict = estimator.predict(x_test)
-    print "RandomForest: error:", float(np.sum(y_predict != y_test) * 100) / len(y_test), "%"
+    # print "RandomForest: error:", float(np.sum(y_predict != y_test) * 100) / len(y_test), "%"
+    print "RandomForest:", metrics.precision_score(y_test, y_predict), ", accuracy:", metrics.accuracy_score(y_test, y_predict)
 
 
 if __name__ == "__main__":
