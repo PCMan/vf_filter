@@ -75,32 +75,20 @@ def modified_exponential(samples):
     pass
 
 
-# spectral parameters
-
-def vf_filter(samples):
-    pass
-
-def spectral_algorithm(samples):
-    pass
-
-def median_freq(samples):
-    pass
-
-
 # Bandpass filter:
 # http://scipy.github.io/old-wiki/pages/Cookbook/ButterworthBandpass
 def butter_bandpass(lowcut, highcut, fs, order=5):
-   nyq = 0.5 * fs
-   low = lowcut / nyq
-   high = highcut / nyq
-   b, a = butter(order, [low, high], btype='band')
-   return b, a
+    nyq = 0.5 * fs
+    low = lowcut / nyq
+    high = highcut / nyq
+    b, a = butter(order, [low, high], btype='band')
+    return b, a
 
 
 def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
-   b, a = butter_bandpass(lowcut, highcut, fs, order=order)
-   y = lfilter(b, a, data)
-   return y
+    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
+    y = lfilter(b, a, data)
+    return y
 
 
 # extract features from raw sample points of the original ECG signal
