@@ -120,10 +120,8 @@ def extract_features(samples, sampling_rate):
             n_crossing = 0
         n_crossing += 1
     # calculate average of all windows
-    features.append(np.mean(tci) if tci else 0.0)
+    # features.append(np.mean(tci) if tci else 0.0)
     features.append(np.mean(tcsc) if tcsc else 0.0)
-    if features[1] != 0:
-        print features
 
     # Standard exponential (STE)
 
@@ -147,3 +145,4 @@ def extract_features(samples, sampling_rate):
 
     # complexity parameters
     # -------------------------------------------------
+    return features

@@ -8,6 +8,9 @@ import wfdb
 import matplotlib.pyplot as plt 
 from vf_features import extract_features
 import pickle
+from sklearn import linear_model
+from sklearn import ensemble
+from sklearn import cross_validation
 
 
 # get name of records from a database
@@ -200,11 +203,26 @@ def main():
 
     print "Summary:\n", "# of segments:", len(all_segments), "# of VT/Vf:", np.sum(all_labels)
 
-    '''
+    x_data = []
     for db_name, record_name, segment in all_segments:
         # convert segment values to features
-        segment = extract_features(segment, sampling_rate=360)
-    '''
+        x_data.append(extract_features(segment, sampling_rate=360))
+    x_data = np.array(x_data)
+    y_data = np.array(all_labels)
+
+    x_train, x_test, y_train, y_test = cross_validation.train_test_split(x_data, y_data, test_size=0.2, random_state=107)
+    estimator = linear_model.LogisticRegression()
+    estimator.fit(x_train, y_train)
+
+    y_predict = estimator.predict(x_test)
+    print "Logistic regression: error:", float(np.sum(y_predict != y_test) * 100) / len(y_test), "%"
+
+    estimator = ensemble.RandomForestClassifier()
+    estimator.fit(x_train, y_train)
+
+    y_predict = estimator.predict(x_test)
+    print "RandomForest: error:", float(np.sum(y_predict != y_test) * 100) / len(y_test), "%"
+
 
 if __name__ == "__main__":
     main()
