@@ -7,6 +7,7 @@ import os
 import wfdb
 import matplotlib.pyplot as plt 
 from vf_features import extract_features
+import pickle
 
 
 # get name of records from a database
@@ -138,51 +139,72 @@ class Record:
 
 
 def main():
-    # mitdb and vfdb contain two channels, but we only use the first one here
-    # data source sampling rate:
-    # mitdb: 360 Hz
-    # vfdb, cudb: 250 Hz
-    output = open("summary.csv", "w")
-    output.write('"db", "record", "vf", "non-vf"\n')
+    cache_file_name = "all_segments.dat"
     segment_duration = 8  # 8 sec per segment
     all_segments = []
     all_labels = []
-    for db_name in ("mitdb", "vfdb", "cudb"):
-        for record_name in get_records(db_name):
-            print "read record:", db_name, record_name
-            record = Record()
-            record.load(db_name, record_name)
+    # load cached segments if they exist
+    try:
+        with open(cache_file_name, "rb") as f:
+            all_segments = pickle.load(f)
+            all_labels = pickle.load(f)
+    except Exception:
+        pass
 
-            print "  sample rate:", record.sample_rate, "# of samples:", len(record.signals), ", # of anns:", len(record.annotations)
+    if not all_segments or not all_labels:
+        # mitdb and vfdb contain two channels, but we only use the first one here
+        # data source sampling rate:
+        # mitdb: 360 Hz
+        # vfdb, cudb: 250 Hz
+        output = open("summary.csv", "w")
+        output.write('"db", "record", "vf", "non-vf"\n')
+        for db_name in ("mitdb", "vfdb", "cudb"):
+            for record_name in get_records(db_name):
+                print "read record:", db_name, record_name
+                record = Record()
+                record.load(db_name, record_name)
 
-            segments, labels = record.get_segments(segment_duration)
-            print "  segments:", len(segments), ", segment size:", len(segments[0])
-            print "  # of vf segments (label=1):", np.sum(labels)
+                print "  sample rate:", record.sample_rate, "# of samples:", len(record.signals), ", # of anns:", len(record.annotations)
 
-            n_vf = np.sum(labels)
-            n_non_vf = len(segments) - n_vf
-            output.write('"{0}","{1}",{2},{3}\n'.format(db_name, record_name, n_vf, n_non_vf))
+                segments, labels = record.get_segments(segment_duration)
+                print "  segments:", len(segments), ", segment size:", len(segments[0])
+                print "  # of vf segments (label=1):", np.sum(labels)
 
-            for segment in segments:
-                # resample to 360 Hz as needed (mainly for cudb)
-                if record.sample_rate != 360:
-                    segment = scipy.signal.resample(segment, 360 * segment_duration)
+                n_vf = np.sum(labels)
+                n_non_vf = len(segments) - n_vf
+                output.write('"{0}","{1}",{2},{3}\n'.format(db_name, record_name, n_vf, n_non_vf))
 
-                # convert segment values to features
-                segment = extract_features(segment, sampling_rate=360)
+                for segment in segments:
+                    # resample to 360 Hz as needed (mainly for cudb)
+                    if record.sample_rate != 360:
+                        segment = scipy.signal.resample(segment, 360 * segment_duration)
 
-                all_segments.append((db_name, record_name, segment))
-            all_labels.extend(labels)
-            '''
-            for segment, has_vf in zip(segments, labels):
-                if has_vf:
-                    plt.plot(segment)
-                    plt.show()
-            '''
-    wfdb.wfdbquit()
+                    all_segments.append((db_name, record_name, segment))
+                all_labels.extend(labels)
+                '''
+                for segment, has_vf in zip(segments, labels):
+                    if has_vf:
+                        plt.plot(segment)
+                        plt.show()
+                '''
+        wfdb.wfdbquit()
+        output.close()
+
+        # cache the segments
+        try:
+            with open(cache_file_name, "wb") as f:
+                pickle.dump(all_segments, f)
+                pickle.dump(all_labels, f)
+        except Exception:
+            pass
+
     print "Summary:\n", "# of segments:", len(all_segments), "# of VT/Vf:", np.sum(all_labels)
 
-    output.close()
+    '''
+    for db_name, record_name, segment in all_segments:
+        # convert segment values to features
+        segment = extract_features(segment, sampling_rate=360)
+    '''
 
 if __name__ == "__main__":
     main()

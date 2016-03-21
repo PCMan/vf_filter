@@ -22,6 +22,51 @@ def threshold_crossing(samples, threshold):
     return crossing
 
 
+def average_tci(crossing, n_samples, sampling_rate):
+    window_size = 3 * sampling_rate
+    window_begin = 0
+    window_end = window_size
+    tcis = []
+    n_crossing = 0
+    for i, crossing_idx in enumerate(crossing):
+        if crossing_idx >= window_end:
+            # end of the current window and begin of the next window
+            window_end += window_size
+            if window_end > n_samples:
+                break
+            window_begin += window_size
+            # calculate TCI
+            t1 = crossing[i - 1]
+            t2 = 0
+            t3 = 0
+            t4 = crossing[i + 1]
+            tci = 1000/((n_crossing - 1) + t2 / (t1 + t2) + t3 / (t3 + t4))
+            tcis.append(tci)
+            n_crossing = 0
+        n_crossing += 1
+    # calculate average of all windows
+    return np.mean(tcis) if tcis else 0.0
+
+
+def average_tcsc(crossing, n_samples, window_size):
+    window_begin = 0
+    window_end = window_size
+    tcsc = []
+    n_crossing = 0
+    for i, crossing_idx in enumerate(crossing):
+        if crossing_idx >= window_end:
+            # end of the current window and begin of the next window
+            window_end += window_size
+            if window_end > n_samples:
+                break
+            window_begin += window_size
+            tcsc.append(n_crossing)
+            n_crossing = 0
+        n_crossing += 1
+    # calculate average of all windows
+    return np.mean(tcsc) if tcsc else 0.0
+
+
 def standard_exponential(samples):
     pass
 
@@ -61,7 +106,7 @@ def extract_features(samples, sampling_rate):
     tci = []
     tcsc = []
     n_crossing = 0
-    for crossing_idx in crossing:
+    for i, crossing_idx in enumerate(crossing):
         if crossing_idx >= window_end:
             # end of the current window and begin of the next window
             window_end += window_size
@@ -69,6 +114,9 @@ def extract_features(samples, sampling_rate):
                 break
             window_begin += window_size
             tcsc.append(n_crossing)
+            # calculate TCI
+            t1 = crossing[i - 1]
+
             n_crossing = 0
         n_crossing += 1
     # calculate average of all windows
