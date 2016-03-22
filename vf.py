@@ -240,7 +240,7 @@ def main():
     # print "RandomForest: error:", float(np.sum(y_predict != y_test) * 100) / len(y_test), "%"
     print "RandomForest:\n", metrics.classification_report(y_test, y_predict), "\n"
 
-    estimator = svm.SVC(C=10, shrinking=False, cache_size=512, verbose=True)
+    estimator = svm.SVC(C=10, shrinking=False, cache_size=512, verbose=False)
     estimator.fit(x_train, y_train)
 
     y_predict = estimator.predict(x_test)

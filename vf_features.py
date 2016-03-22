@@ -4,7 +4,7 @@
 import numpy as np
 from sklearn import preprocessing
 from scipy.signal import butter, lfilter
-
+import sampen  # calculate sample entropy
 
 # time domain/morphology
 # get the index of threshold crossing points in the segment
@@ -115,6 +115,25 @@ def vf_leak(samples, peak_freq):
     return vf_leak_numerator / vf_leak_denominator
 
 
+def sample_entropy(samples, window_size):
+    window_begin = 0
+    window_end = window_size
+    n_samples = len(samples)
+    results = []
+    while window_end < n_samples:
+        # Ref: Haiyan Li. 2009 Detecting Ventricular Fibrillation by Fast Algorithm of Dynamic Sample Entropy
+        # N = 1250 , r = 0.2 x SD, m = 2 worked well for the characterization ECG signals.
+        # N = 1250 = 250 Hz x 5 seconds (5-sec window)
+        spens = sampen.sampen2(samples[window_begin:window_end], mm=2)
+        i, entropy, stddev = spens[2]  # unpack the result with m=2
+        if entropy is None:  # it's possible that sampen2() returns None here
+            entropy = 0.0
+        window_begin += window_size
+        window_end += window_size
+        results.append(entropy)
+    return np.mean(results)
+
+
 # extract features from raw sample points of the original ECG signal
 def extract_features(samples, sampling_rate):
     # normalize the input ECG sequence
@@ -156,6 +175,7 @@ def extract_features(samples, sampling_rate):
     # FIXME: what if peak freq = 0?
     if peak_freq == 0:  # is this correct?
         peak_freq = fft_freq[1]
+
     jmax = min(20 * peak_freq_idx, 100)
     # approximate the amplitude by real + imag parts
     amplitudes = [np.abs(fft[i].real) + np.abs(fft[i].imag) for i in range(0, jmax + 1)]
@@ -168,4 +188,9 @@ def extract_features(samples, sampling_rate):
 
     # complexity parameters
     # -------------------------------------------------
+
+    # sample entropy (SpEn)
+    features.append(sample_entropy(samples, 5 * sampling_rate))
+    print features
+
     return features
