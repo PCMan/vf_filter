@@ -231,28 +231,27 @@ def main():
 
     y_predict = estimator.predict(x_test)
     # print "Logistic regression: error:", float(np.sum(y_predict != y_test) * 100) / len(y_test), "%"
-    print "Logistic regression: precision:", metrics.precision_score(y_test, y_predict), ", accuracy:", metrics.accuracy_score(y_test, y_predict)
+    print "Logistic regression: precision:\n", metrics.classification_report(y_test, y_predict), "\n"
 
     estimator = ensemble.RandomForestClassifier()
     estimator.fit(x_train, y_train)
 
     y_predict = estimator.predict(x_test)
     # print "RandomForest: error:", float(np.sum(y_predict != y_test) * 100) / len(y_test), "%"
-    print "RandomForest:", metrics.precision_score(y_test, y_predict), ", accuracy:", metrics.accuracy_score(y_test, y_predict)
+    print "RandomForest:\n", metrics.classification_report(y_test, y_predict), "\n"
 
     estimator = svm.SVC(C=10, shrinking=False, cache_size=512, verbose=True)
     estimator.fit(x_train, y_train)
 
     y_predict = estimator.predict(x_test)
-    print "SVC: precision", metrics.precision_score(y_test, y_predict), ", accuracy:", metrics.accuracy_score(y_test, y_predict)
+    print "SVC:\n", metrics.classification_report(y_test, y_predict), "\n"
 
     estimator = ensemble.GradientBoostingClassifier()
     estimator.fit(x_train, y_train)
 
     y_predict = estimator.predict(x_test)
     # print "RandomForest: error:", float(np.sum(y_predict != y_test) * 100) / len(y_test), "%"
-    print "Gradient Boosting:", metrics.precision_score(y_test, y_predict), ", accuracy:", metrics.accuracy_score(y_test, y_predict)
-
+    print "Gradient Boosting:\n", metrics.classification_report(y_test, y_predict), "\n"
 
 
 if __name__ == "__main__":

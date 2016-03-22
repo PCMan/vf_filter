@@ -128,30 +128,9 @@ def extract_features(samples, sampling_rate):
     # Threshold crossing interval (TCI) and Threshold crossing sample count (TCSC)
     # get all crossing points
     crossing = threshold_crossing(samples, threshold=0.2)
-    # calculate average TCI and TCSC using a 3-s window
+    # calculate average TCSC using a 3-s window
     # using 3-s moving window
-    window_size = 3 * sampling_rate
-    window_begin = 0
-    window_end = window_size
-    tci = []
-    tcsc = []
-    n_crossing = 0
-    for i, crossing_idx in enumerate(crossing):
-        if crossing_idx >= window_end:
-            # end of the current window and begin of the next window
-            window_end += window_size
-            if window_end > n_samples:
-                break
-            window_begin += window_size
-            tcsc.append(n_crossing)
-            # calculate TCI
-            t1 = crossing[i - 1]
-
-            n_crossing = 0
-        n_crossing += 1
-    # calculate average of all windows
-    # features.append(np.mean(tci) if tci else 0.0)
-    features.append(np.mean(tcsc) if tcsc else 0.0)
+    features.append(average_tcsc(crossing, len(samples), window_size=3 * sampling_rate))
 
     # Standard exponential (STE)
 
