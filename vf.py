@@ -225,7 +225,7 @@ def main():
     # normalize the features
     preprocessing.normalize(x_data)
 
-    x_train, x_test, y_train, y_test = cross_validation.train_test_split(x_data, y_data, test_size=0.2, random_state=107)
+    x_train, x_test, y_train, y_test = cross_validation.train_test_split(x_data, y_data, test_size=0.2)
     estimator = linear_model.LogisticRegression()
     estimator.fit(x_train, y_train)
 

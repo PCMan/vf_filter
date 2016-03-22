@@ -91,13 +91,16 @@ def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
     return y
 
 
-def vf_leak(samples, fft, fft_freq):
+def find_peak_freq(fft, fft_freq):
+    peak_freq_idx = fft[:len(fft)/2].argmax()
+    return peak_freq_idx, fft_freq[peak_freq_idx]
+
+
+def vf_leak(samples, peak_freq):
     # calculate VF leaks
     # find the central/peak frequency
     # http://cinc.mit.edu/archives/2002/pdf/213.pdf
     # T = (1/f) * sample_rate
-    peak_freq_idx = fft[:len(fft)/2].argmax()
-    peak_freq = fft_freq[peak_freq_idx]
     if peak_freq != 0:
         cycle = (1 / peak_freq)  # in terms of samples
     else:
@@ -136,17 +139,32 @@ def extract_features(samples, sampling_rate):
 
     # Modified exponential (MEA)
 
-    # spectral parameters
+    # spectral parameters (characteristics of power spectrum)
     # -------------------------------------------------
 
     # perform discrete Fourier transform
     fft = np.fft.fft(samples)
     fft_freq = np.fft.fftfreq(len(samples))
 
+    peak_freq_idx, peak_freq = find_peak_freq(fft, fft_freq)
+
     # calculate VF leaks
-    features.append(vf_leak(samples, fft, fft_freq))
+    features.append(vf_leak(samples, peak_freq))
 
+    # calculate other spectral parameters
+    # first spectral moment M = 1/peak_freq * (sum(ai * wi)/sum(wi)) for i = 1 to jmax
+    # FIXME: what if peak freq = 0?
+    if peak_freq == 0:  # is this correct?
+        peak_freq = fft_freq[1]
+    jmax = peak_freq_idx + 1
+    # approximate the amplitude by real + imag parts
+    amplitudes = [np.abs(fft[i].real) + np.abs(fft[i].imag) for i in range(0, jmax)]
+    spectral_moment = (1 / peak_freq) * np.sum([amplitudes[i] * fft_freq[i] for i in range(0, jmax)]) / np.sum(amplitudes)
+    features.append(spectral_moment)
 
+    # A1: 0 -> min(20 * peak_freq, 100)
+    # A2: 0.5 -> peak_freq / 2
+    # A3: 0.6 bands around 2 * peak_freq -> 8 * peak_freq divided by 0.5 -> min(20 * peak_freq, 100)
 
     # complexity parameters
     # -------------------------------------------------
