@@ -91,6 +91,27 @@ def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
     return y
 
 
+def vf_leak(samples, fft, fft_freq):
+    # calculate VF leaks
+    # find the central/peak frequency
+    # http://cinc.mit.edu/archives/2002/pdf/213.pdf
+    # T = (1/f) * sample_rate
+    peak_freq_idx = fft[:len(fft)/2].argmax()
+    peak_freq = fft_freq[peak_freq_idx]
+    if peak_freq != 0:
+        cycle = (1 / peak_freq)  # in terms of samples
+    else:
+        cycle = len(samples)  # FIXME: should we use infinity here?
+
+    vf_leak_numerator = 0.0
+    vf_leak_denominator = 0.0
+    half_cycle = int(cycle/2)
+    for i in range(half_cycle, len(samples)):
+        vf_leak_numerator += np.abs(samples[i] + samples[i - half_cycle])
+        vf_leak_denominator += np.abs(samples[i]) + np.abs(samples[i - half_cycle])
+    return vf_leak_numerator / vf_leak_denominator
+
+
 # extract features from raw sample points of the original ECG signal
 def extract_features(samples, sampling_rate):
     # normalize the input ECG sequence
@@ -140,29 +161,13 @@ def extract_features(samples, sampling_rate):
     # -------------------------------------------------
 
     # perform discrete Fourier transform
-    dft = np.fft.fft(samples)
+    fft = np.fft.fft(samples)
     fft_freq = np.fft.fftfreq(len(samples))
 
     # calculate VF leaks
-    # find the central/peak frequency
-    # http://cinc.mit.edu/archives/2002/pdf/213.pdf
-    # T = (1/f) * sample_rate
-    peak_freq_idx = dft[:len(dft)/2].argmax()
-    peak_freq = fft_freq[peak_freq_idx]
-    cycle = (1 / peak_freq)  # in terms of samples
+    features.append(vf_leak(samples, fft, fft_freq))
 
-    # print peak_freq, "Hz, cycle:", cycle
-    if cycle == np.inf:
-        cycle = len(samples)
 
-    vf_leak_numerator = 0.0
-    vf_leak_denominator = 0.0
-    half_cycle = int(cycle/2)
-    for i in range(half_cycle, len(samples)):
-        vf_leak_numerator += np.abs(samples[i] + samples[i - half_cycle])
-        vf_leak_denominator += np.abs(samples[i]) + np.abs(samples[i - half_cycle])
-    vf_leak = vf_leak_numerator / vf_leak_denominator
-    features.append(vf_leak)
 
     # complexity parameters
     # -------------------------------------------------
