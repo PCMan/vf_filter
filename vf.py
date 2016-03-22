@@ -8,10 +8,12 @@ import wfdb
 import matplotlib.pyplot as plt 
 from vf_features import extract_features
 import pickle
+from sklearn import preprocessing
 from sklearn import linear_model
 from sklearn import ensemble
 from sklearn import cross_validation
 from sklearn import metrics
+from sklearn import svm
 from multiprocessing import Pool
 
 
@@ -220,6 +222,9 @@ def main():
     y_data = np.array(all_labels)
     print "features are extracted."
 
+    # normalize the features
+    preprocessing.normalize(x_data)
+
     x_train, x_test, y_train, y_test = cross_validation.train_test_split(x_data, y_data, test_size=0.2, random_state=107)
     estimator = linear_model.LogisticRegression()
     estimator.fit(x_train, y_train)
@@ -234,6 +239,20 @@ def main():
     y_predict = estimator.predict(x_test)
     # print "RandomForest: error:", float(np.sum(y_predict != y_test) * 100) / len(y_test), "%"
     print "RandomForest:", metrics.precision_score(y_test, y_predict), ", accuracy:", metrics.accuracy_score(y_test, y_predict)
+
+    estimator = svm.SVC(C=10, shrinking=False, cache_size=512, verbose=True)
+    estimator.fit(x_train, y_train)
+
+    y_predict = estimator.predict(x_test)
+    print "SVC: precision", metrics.precision_score(y_test, y_predict), ", accuracy:", metrics.accuracy_score(y_test, y_predict)
+
+    estimator = ensemble.GradientBoostingClassifier()
+    estimator.fit(x_train, y_train)
+
+    y_predict = estimator.predict(x_test)
+    # print "RandomForest: error:", float(np.sum(y_predict != y_test) * 100) / len(y_test), "%"
+    print "Gradient Boosting:", metrics.precision_score(y_test, y_predict), ", accuracy:", metrics.accuracy_score(y_test, y_predict)
+
 
 
 if __name__ == "__main__":

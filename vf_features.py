@@ -147,11 +147,11 @@ def extract_features(samples, sampling_rate):
     # find the central/peak frequency
     # http://cinc.mit.edu/archives/2002/pdf/213.pdf
     # T = (1/f) * sample_rate
-    peak_freq = dft[:len(dft)/2].argmax()
-    peak_freq = fft_freq[peak_freq] * sampling_rate
-    cycle = (1 / peak_freq) * sampling_rate  # in terms of samples
-    # print peak_freq, "Hz, cycle:", cycle
+    peak_freq_idx = dft[:len(dft)/2].argmax()
+    peak_freq = fft_freq[peak_freq_idx]
+    cycle = (1 / peak_freq)  # in terms of samples
 
+    # print peak_freq, "Hz, cycle:", cycle
     if cycle == np.inf:
         cycle = len(samples)
 
