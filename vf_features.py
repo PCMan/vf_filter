@@ -156,10 +156,10 @@ def extract_features(samples, sampling_rate):
     # FIXME: what if peak freq = 0?
     if peak_freq == 0:  # is this correct?
         peak_freq = fft_freq[1]
-    jmax = peak_freq_idx + 1
+    jmax = min(20 * peak_freq_idx, 100)
     # approximate the amplitude by real + imag parts
-    amplitudes = [np.abs(fft[i].real) + np.abs(fft[i].imag) for i in range(0, jmax)]
-    spectral_moment = (1 / peak_freq) * np.sum([amplitudes[i] * fft_freq[i] for i in range(0, jmax)]) / np.sum(amplitudes)
+    amplitudes = [np.abs(fft[i].real) + np.abs(fft[i].imag) for i in range(0, jmax + 1)]
+    spectral_moment = (1 / peak_freq) * np.sum([amplitudes[i] * fft_freq[i] for i in range(0, jmax + 1)]) / np.sum(amplitudes)
     features.append(spectral_moment)
 
     # A1: 0 -> min(20 * peak_freq, 100)
