@@ -168,6 +168,49 @@ def sample_entropy(samples, window_size):
     return np.mean(results)
 
 
+# Implement the algorithm described in the paper:
+# Xu-Sheng Zhang et al. 1999. Detecting Ventricular Tachycardia and Fibrillation by Complexity Measure
+def lz_complexity(samples):
+    cn = 0
+    # pre-processing: mean subtraction
+    samples = samples - np.mean(samples)
+
+    # find optimal threshold
+    pos_peak = np.max(samples)  # positive peak
+    neg_peak = np.min(samples)  # negative peak
+    n_samples = len(samples)
+
+    pos_count = np.sum(np.logical_and(0.1 * pos_peak > samples, samples > 0))
+    neg_count = np.sum(np.logical_and(0.1 * neg_peak < samples, samples < 0))
+
+    if (pos_count + neg_count) < 0.4 * n_samples:
+        threshold = 0.0
+    elif pos_count < neg_count:
+        threshold = 0.2 * pos_peak
+    else:
+        threshold = 0.2 * neg_peak
+
+    # FIXME: this implementation with python string is inefficient
+    # make the samples a binary string S based on the threshold
+    bin_str = ''.join(['1' if b else '0' for b in (samples > threshold)])
+
+    s = bin_str[0]  # S=s1
+    q = bin_str[1]  # Q=s2
+    for i in range(2, n_samples):
+        # SQ concatenation with the last char deleted => SQpi
+        sq = s + q[:-1]
+        if q in sq:  # Q is a substring of v(SQpi)
+            q += bin_str[i]
+        else:
+            cn += 1
+            s += q
+            q = bin_str[i]
+
+    # normalization => C(n) = c(n)/b(n), b(n) = n/log2 n
+    bn = n_samples / np.log2(n_samples)
+    return cn / bn
+
+
 # extract features from raw sample points of the original ECG signal
 def extract_features(samples, sampling_rate):
     # normalize the input ECG sequence
@@ -224,6 +267,9 @@ def extract_features(samples, sampling_rate):
 
     # complexity parameters
     # -------------------------------------------------
+    lzc = lz_complexity(samples)
+    print lzc
+    features.append(lzc)
 
     # sample entropy (SpEn)
     # spen = sample_entropy(samples, 5 * sampling_rate)
