@@ -2,9 +2,9 @@
 # Felipe AA et al. 2014. Detection of Life-Threatening Arrhythmias Using Feature Selection and Support Vector Machines
 
 import numpy as np
-from sklearn import preprocessing
 from scipy.signal import butter, lfilter
 import sampen  # calculate sample entropy
+
 
 # time domain/morphology
 # get the index of threshold crossing points in the segment
@@ -49,7 +49,7 @@ def average_tci(crossing, n_samples, sampling_rate):
     return np.mean(tcis) if tcis else 0.0
 
 
-def average_tcsc(crossing, n_samples, window_size):
+def average_tcsc(crossing, n_samples, sampling_rate, window_size):
     window_begin = 0
     window_end = window_size
     tcsc = []
@@ -57,10 +57,10 @@ def average_tcsc(crossing, n_samples, window_size):
     for i, crossing_idx in enumerate(crossing):
         if crossing_idx >= window_end:
             # end of the current window and begin of the next window
-            window_end += window_size
+            window_end += sampling_rate
             if window_end > n_samples:
                 break
-            window_begin += window_size
+            window_begin += sampling_rate
             tcsc.append(n_crossing)
             n_crossing = 0
         n_crossing += 1
@@ -68,8 +68,37 @@ def average_tcsc(crossing, n_samples, window_size):
     return np.mean(tcsc) if tcsc else 0.0
 
 
-def standard_exponential(samples):
-    pass
+def standard_exponential(samples, sampling_rate, time_constant=3):
+    # find the max amplitude in the sample sequence
+    # put an exponential like function through this point
+    # E(t) = M * exp(- |t-tm| / tc), where
+    # M: max signal amplitude at time tm
+    # tc: time constant (default to 3)
+    max_time = np.argmax(samples)
+    max_amplitude = samples[max_time]
+    time_constant *= sampling_rate  # convert time from second to samples
+
+    def func(t):
+        return max_amplitude * np.exp(-np.abs(t - max_time) / time_constant)
+
+    # calculate intersections n of this curve with the ECG signal
+    n_crosses = 0.0
+    higher = True if samples[0] > func(0) else False
+    for t in range(1, len(samples) - 1):
+        threshold = func(t)
+        prev_sample = samples[t - 1]
+        sample = samples[t]
+        if higher:
+            if sample < threshold:
+                higher = False
+                n_crosses += 1
+        else:
+            if sample > threshold:
+                higher = True
+                n_crosses += 1
+    duration = float(len(samples)) / sampling_rate
+    return n_crosses / duration
+
 
 def modified_exponential(samples):
     pass
@@ -128,8 +157,8 @@ def sample_entropy(samples, window_size):
         i, entropy, stddev = spens[2]  # unpack the result with m=2
         if entropy is None:  # it's possible that sampen2() returns None here
             entropy = 0.0
-        window_begin += window_size
-        window_end += window_size
+        window_begin += 1
+        window_end += 1
         results.append(entropy)
     return np.mean(results)
 
@@ -152,9 +181,11 @@ def extract_features(samples, sampling_rate):
     crossing = threshold_crossing(samples, threshold=0.2)
     # calculate average TCSC using a 3-s window
     # using 3-s moving window
-    features.append(average_tcsc(crossing, len(samples), window_size=3 * sampling_rate))
+    features.append(average_tcsc(crossing, len(samples), sampling_rate=sampling_rate, window_size=3 * sampling_rate))
 
     # Standard exponential (STE)
+    ste = standard_exponential(samples, sampling_rate)
+    features.append(ste)
 
     # Modified exponential (MEA)
 
@@ -190,7 +221,7 @@ def extract_features(samples, sampling_rate):
     # -------------------------------------------------
 
     # sample entropy (SpEn)
-    features.append(sample_entropy(samples, 5 * sampling_rate))
-    print features
+    # spen = sample_entropy(samples, 5 * sampling_rate)
+    # features.append(spen)
 
     return features

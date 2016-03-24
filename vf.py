@@ -144,8 +144,10 @@ class Record:
             labels.append(has_vf)
         return np.array(segments), np.array(labels)
 
+
 def extract_features_job(s):
     return extract_features(s[2], sampling_rate=360)
+
 
 def main():
     cache_file_name = "all_segments.dat"
