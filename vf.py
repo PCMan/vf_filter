@@ -220,6 +220,7 @@ def main():
         # convert segment values to features
         x_data.append(extract_features(segment, sampling_rate=360))
     '''
+
     x_data = np.array(x_data)
     y_data = np.array(all_labels)
     print "features are extracted."

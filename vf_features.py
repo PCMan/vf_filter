@@ -190,21 +190,19 @@ def lz_complexity(samples):
     else:
         threshold = 0.2 * neg_peak
 
-    # FIXME: this implementation with python string is inefficient
     # make the samples a binary string S based on the threshold
-    bin_str = ''.join(['1' if b else '0' for b in (samples > threshold)])
-
-    s = bin_str[0]  # S=s1
-    q = bin_str[1]  # Q=s2
+    bin_str = bytearray([1 if b else 0 for b in (samples > threshold)])
+    s = bytearray([bin_str[0]])  # S=s1
+    q = bytearray([bin_str[1]])  # Q=s2
     for i in range(2, n_samples):
         # SQ concatenation with the last char deleted => SQpi
         sq = s + q[:-1]
         if q in sq:  # Q is a substring of v(SQpi)
-            q += bin_str[i]
+            q.append(bin_str[i])
         else:
             cn += 1
-            s += q
-            q = bin_str[i]
+            s.extend(q)
+            q = bytearray([bin_str[i]])
 
     # normalization => C(n) = c(n)/b(n), b(n) = n/log2 n
     bn = n_samples / np.log2(n_samples)
