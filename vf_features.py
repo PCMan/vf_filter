@@ -23,7 +23,7 @@ def threshold_crossing(samples, threshold):
                 high = True
     return crossing
 
-
+'''
 def average_tci(crossing, n_samples, sampling_rate):
     window_size = 3 * sampling_rate
     window_begin = 0
@@ -48,9 +48,11 @@ def average_tci(crossing, n_samples, sampling_rate):
         n_crossing += 1
     # calculate average of all windows
     return np.mean(tcis) if tcis else 0.0
+'''
 
 
-def average_tcsc(crossing, n_samples, sampling_rate, window_size):
+def average_tcsc(crossing, n_samples, sampling_rate, window_duration):
+    window_size = window_duration * sampling_rate
     window_begin = 0
     window_end = window_size
     tcsc = []
@@ -58,6 +60,7 @@ def average_tcsc(crossing, n_samples, sampling_rate, window_size):
     for i, crossing_idx in enumerate(crossing):
         if crossing_idx >= window_end:
             # end of the current window and begin of the next window
+            # right shift the window by 1 second
             window_end += sampling_rate
             if window_end > n_samples:
                 break
@@ -120,11 +123,13 @@ def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
     return y
 
 
+# find the peak frequency and its index in the FFT spectrum
 def find_peak_freq(fft, fft_freq):
     peak_freq_idx = fft[:len(fft)/2].argmax()
     return peak_freq_idx, fft_freq[peak_freq_idx]
 
 
+# the VF leak algorithm
 def vf_leak(samples, peak_freq):
     # calculate VF leaks
     # find the central/peak frequency
@@ -220,6 +225,7 @@ def extract_features(samples, sampling_rate):
     features = []
     n_samples = len(samples)
     duration = int(n_samples / sampling_rate)
+
     # Time domain/morphology
     # -------------------------------------------------
     # Threshold crossing interval (TCI) and Threshold crossing sample count (TCSC)
@@ -227,7 +233,7 @@ def extract_features(samples, sampling_rate):
     crossing = threshold_crossing(samples, threshold=0.2)
     # calculate average TCSC using a 3-s window
     # using 3-s moving window
-    features.append(average_tcsc(crossing, len(samples), sampling_rate=sampling_rate, window_size=3 * sampling_rate))
+    features.append(average_tcsc(crossing, len(samples), sampling_rate=sampling_rate, window_duration=3))
 
     # Standard exponential (STE)
     ste = standard_exponential(samples, sampling_rate)
@@ -237,7 +243,6 @@ def extract_features(samples, sampling_rate):
 
     # spectral parameters (characteristics of power spectrum)
     # -------------------------------------------------
-
     # perform discrete Fourier transform
     fft = np.fft.fft(samples)
     fft_freq = np.fft.fftfreq(len(samples))
@@ -254,7 +259,7 @@ def extract_features(samples, sampling_rate):
         peak_freq = fft_freq[1]
 
     jmax = min(20 * peak_freq_idx, 100)
-    # approximate the amplitude by real + imag parts
+    # approximate the amplitude by real + imaginary parts
     amplitudes = [np.abs(fft[i].real) + np.abs(fft[i].imag) for i in range(0, jmax + 1)]
     spectral_moment = (1 / peak_freq) * np.sum([amplitudes[i] * fft_freq[i] for i in range(0, jmax + 1)]) / np.sum(amplitudes)
     features.append(spectral_moment)
@@ -266,7 +271,6 @@ def extract_features(samples, sampling_rate):
     # complexity parameters
     # -------------------------------------------------
     lzc = lz_complexity(samples)
-    print lzc
     features.append(lzc)
 
     # sample entropy (SpEn)

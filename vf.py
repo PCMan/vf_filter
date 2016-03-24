@@ -7,14 +7,21 @@ import os
 import wfdb
 import matplotlib.pyplot as plt 
 from vf_features import extract_features
-import pickle
+# import pickle
+import cPickle as pickle  # python 2 only
 from sklearn import preprocessing
 from sklearn import linear_model
 from sklearn import ensemble
 from sklearn import cross_validation
 from sklearn import metrics
 from sklearn import svm
+from sklearn import grid_search
 from multiprocessing import Pool
+
+
+DEFAULT_SAMPLING_RATE = 360.0
+N_JOBS = 6
+N_CV_FOLDS = 10
 
 
 # get name of records from a database
@@ -146,17 +153,18 @@ class Record:
 
 
 def extract_features_job(s):
-    return extract_features(s[2], sampling_rate=360)
+    db_name, record_name, segment, sample_rate = s
+    return extract_features(segment, sampling_rate=DEFAULT_SAMPLING_RATE)
 
 
-def main():
-    cache_file_name = "all_segments.dat"
+def load_all_segments():
+    segments_cache_name = "all_segments.dat"
     segment_duration = 8  # 8 sec per segment
     all_segments = []
     all_labels = []
     # load cached segments if they exist
     try:
-        with open(cache_file_name, "rb") as f:
+        with open(segments_cache_name, "rb") as f:
             all_segments = pickle.load(f)
             all_labels = pickle.load(f)
     except Exception:
@@ -186,44 +194,76 @@ def main():
                 output.write('"{0}","{1}",{2},{3}\n'.format(db_name, record_name, n_vf, n_non_vf))
 
                 for segment in segments:
-                    # resample to 360 Hz as needed (mainly for cudb)
-                    if record.sample_rate != 360:
-                        segment = scipy.signal.resample(segment, 360 * segment_duration)
+                    # resample to DEFAULT_SAMPLING_RATE as needed
+                    if record.sample_rate != DEFAULT_SAMPLING_RATE:
+                        segment = scipy.signal.resample(segment, DEFAULT_SAMPLING_RATE * segment_duration)
 
-                    all_segments.append((db_name, record_name, segment))
+                    all_segments.append((db_name, record_name, segment, record.sample_rate))
                 all_labels.extend(labels)
-                '''
-                for segment, has_vf in zip(segments, labels):
-                    if has_vf:
-                        plt.plot(segment)
-                        plt.show()
-                '''
+
+        '''
+        for segment, has_vf in zip(all_segments, all_labels):
+            if has_vf:
+                plt.plot(segment[2])
+                plt.show()
+        '''
+
         wfdb.wfdbquit()
         output.close()
 
         # cache the segments
         try:
-            with open(cache_file_name, "wb") as f:
+            with open(segments_cache_name, "wb") as f:
                 pickle.dump(all_segments, f)
                 pickle.dump(all_labels, f)
         except Exception:
             pass
 
-    print "Summary:\n", "# of segments:", len(all_segments), "# of VT/Vf:", np.sum(all_labels)
+    return all_segments, all_labels
 
-    # use multiprocessing for speed up.
+
+def load_data():
+    features_cache_name = "features.dat"
     x_data = []
-    pool = Pool(6)
-    x_data = pool.map(extract_features_job, all_segments)
-    '''
-    for db_name, record_name, segment in all_segments:
-        # convert segment values to features
-        x_data.append(extract_features(segment, sampling_rate=360))
-    '''
+    y_data = []
+    # load cached segments if they exist
+    try:
+        with open(features_cache_name, "rb") as f:
+            x_data = pickle.load(f)
+            y_data = pickle.load(f)
+    except Exception:
+        all_segments, all_labels = load_all_segments()
 
-    x_data = np.array(x_data)
-    y_data = np.array(all_labels)
-    print "features are extracted."
+        # use multiprocessing for speed up.
+        print "start feature extraction..."
+        pool = Pool(N_JOBS)
+        x_data = pool.map(extract_features_job, all_segments)
+        '''
+        x_data = []
+        for db_name, record_name, segment, sample_rate in all_segments:
+            # convert segment values to features
+            x_data.append(extract_features(segment, sampling_rate=sample_rate))
+        '''
+        x_data = np.array(x_data)
+        y_data = np.array(all_labels)
+
+        # cache the data
+        try:
+            with open(features_cache_name, "wb") as f:
+                pickle.dump(x_data, f)
+                pickle.dump(y_data, f)
+        except Exception:
+            pass
+        print "features are extracted."
+
+    return x_data, y_data
+
+
+def main():
+
+    # load features
+    x_data, y_data = load_data()
+    print "Summary:\n", "# of segments:", len(x_data), "# of VT/Vf:", np.sum(y_data)
 
     # normalize the features
     preprocessing.normalize(x_data)
@@ -236,22 +276,27 @@ def main():
     # print "Logistic regression: error:", float(np.sum(y_predict != y_test) * 100) / len(y_test), "%"
     print "Logistic regression: precision:\n", metrics.classification_report(y_test, y_predict), "\n"
 
+    '''
     estimator = ensemble.RandomForestClassifier()
-    estimator.fit(x_train, y_train)
-
-    y_predict = estimator.predict(x_test)
+    grid = grid_search.GridSearchCV(estimator, {}, n_jobs=N_JOBS, cv=N_CV_FOLDS)
+    grid.fit(x_train, y_train)
+    y_predict = grid.predict(x_test)
     # print "RandomForest: error:", float(np.sum(y_predict != y_test) * 100) / len(y_test), "%"
     print "RandomForest:\n", metrics.classification_report(y_test, y_predict), "\n"
+    '''
 
-    estimator = svm.SVC(C=10, shrinking=False, cache_size=512, verbose=False)
-    estimator.fit(x_train, y_train)
-
-    y_predict = estimator.predict(x_test)
-    print "SVC:\n", metrics.classification_report(y_test, y_predict), "\n"
+    estimator = svm.SVC(shrinking=False, cache_size=1024, verbose=False)
+    grid = grid_search.RandomizedSearchCV(estimator, {
+                                        "C": np.logspace(-2, 2, 5),
+                                        "gamma": np.logspace(-2, 2, 5)
+                                    },
+                                    n_jobs=N_JOBS, cv=N_CV_FOLDS, verbose=1)
+    grid.fit(x_train, y_train)
+    y_predict = grid.predict(x_test)
+    print "SVC:\n", metrics.classification_report(y_test, y_predict), grid.best_params_, "\n"
 
     estimator = ensemble.GradientBoostingClassifier()
     estimator.fit(x_train, y_train)
-
     y_predict = estimator.predict(x_test)
     # print "RandomForest: error:", float(np.sum(y_predict != y_test) * 100) / len(y_test), "%"
     print "Gradient Boosting:\n", metrics.classification_report(y_test, y_predict), "\n"
