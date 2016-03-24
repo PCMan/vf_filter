@@ -267,23 +267,24 @@ def main():
 
     # normalize the features
     preprocessing.normalize(x_data)
-
     x_train, x_test, y_train, y_test = cross_validation.train_test_split(x_data, y_data, test_size=0.2)
-    estimator = linear_model.LogisticRegression()
+    
+    estimator = linear_model.LogisticRegressionCV()
     estimator.fit(x_train, y_train)
-
     y_predict = estimator.predict(x_test)
     # print "Logistic regression: error:", float(np.sum(y_predict != y_test) * 100) / len(y_test), "%"
-    print "Logistic regression: precision:\n", metrics.classification_report(y_test, y_predict), "\n"
+    print "Logistic regression: precision:\n", metrics.classification_report(y_test, y_predict), estimator.scores_, "\n"
 
-    '''
     estimator = ensemble.RandomForestClassifier()
-    grid = grid_search.GridSearchCV(estimator, {}, n_jobs=N_JOBS, cv=N_CV_FOLDS)
+    grid = grid_search.RandomizedSearchCV(estimator, {
+                                        "n_estimators": range(10, 110, 10)
+                                    },
+                                    n_iter=10,
+                                    n_jobs=N_JOBS, cv=N_CV_FOLDS, verbose=1)
     grid.fit(x_train, y_train)
     y_predict = grid.predict(x_test)
     # print "RandomForest: error:", float(np.sum(y_predict != y_test) * 100) / len(y_test), "%"
-    print "RandomForest:\n", metrics.classification_report(y_test, y_predict), "\n"
-    '''
+    print "RandomForest:\n", metrics.classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n"
 
     estimator = svm.SVC(shrinking=False, cache_size=1024, verbose=False)
     grid = grid_search.RandomizedSearchCV(estimator, {
@@ -293,13 +294,20 @@ def main():
                                     n_jobs=N_JOBS, cv=N_CV_FOLDS, verbose=1)
     grid.fit(x_train, y_train)
     y_predict = grid.predict(x_test)
-    print "SVC:\n", metrics.classification_report(y_test, y_predict), grid.best_params_, "\n"
+    print "SVC:\n", metrics.classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n"
 
     estimator = ensemble.GradientBoostingClassifier()
-    estimator.fit(x_train, y_train)
-    y_predict = estimator.predict(x_test)
+    grid = grid_search.RandomizedSearchCV(estimator, {
+                                        "learning_rate": np.logspace(-2, 1, 4),
+                                        "n_estimators": range(50, 210, 10),
+                                        "max_depth": range(3, 10)
+                                    },
+                                    n_iter=20,
+                                    n_jobs=N_JOBS, cv=N_CV_FOLDS, verbose=1)
+    grid.fit(x_train, y_train)
+    y_predict = grid.predict(x_test)
     # print "RandomForest: error:", float(np.sum(y_predict != y_test) * 100) / len(y_test), "%"
-    print "Gradient Boosting:\n", metrics.classification_report(y_test, y_predict), "\n"
+    print "Gradient Boosting:\n", metrics.classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n"
 
 
 if __name__ == "__main__":
