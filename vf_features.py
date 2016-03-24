@@ -4,6 +4,7 @@
 import numpy as np
 from scipy.signal import butter, lfilter
 import sampen  # calculate sample entropy
+import pyeeg
 
 
 # time domain/morphology
@@ -86,7 +87,6 @@ def standard_exponential(samples, sampling_rate, time_constant=3):
     higher = True if samples[0] > func(0) else False
     for t in range(1, len(samples) - 1):
         threshold = func(t)
-        prev_sample = samples[t - 1]
         sample = samples[t]
         if higher:
             if sample < threshold:
@@ -101,7 +101,7 @@ def standard_exponential(samples, sampling_rate, time_constant=3):
 
 
 def modified_exponential(samples):
-    pass
+    return 0.0
 
 
 # Bandpass filter:
@@ -144,6 +144,10 @@ def vf_leak(samples, peak_freq):
     return vf_leak_numerator / vf_leak_denominator
 
 
+# the original sample entropy algorithm is too slow.
+# The implementation provided by sampen python package is also slow.
+# here we use sample entropy implemented by PyEEG project, which is a little bit faster.
+# https://github.com/forrestbao/pyeeg
 def sample_entropy(samples, window_size):
     window_begin = 0
     window_end = window_size
@@ -153,12 +157,13 @@ def sample_entropy(samples, window_size):
         # Ref: Haiyan Li. 2009 Detecting Ventricular Fibrillation by Fast Algorithm of Dynamic Sample Entropy
         # N = 1250 , r = 0.2 x SD, m = 2 worked well for the characterization ECG signals.
         # N = 1250 = 250 Hz x 5 seconds (5-sec window)
-        spens = sampen.sampen2(samples[window_begin:window_end], mm=2)
-        i, entropy, stddev = spens[2]  # unpack the result with m=2
+        # spens = sampen.sampen2(samples[window_begin:window_end], mm=2)
+        # i, entropy, stddev = spens[2]  # unpack the result with m=2
+        entropy = pyeeg.samp_entropy(samples[window_begin:window_end], M=2, R=0.2)
         if entropy is None:  # it's possible that sampen2() returns None here
             entropy = 0.0
-        window_begin += 1
-        window_end += 1
+        window_begin += 360
+        window_end += 360
         results.append(entropy)
     return np.mean(results)
 
