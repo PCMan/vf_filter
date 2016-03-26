@@ -27,12 +27,12 @@ def get_records(db_name):
 
 
 class Segment:
-    def __init__(self):
-        self.record = ""
-        self.label = 0
-        self.signals = None
-        self.begin_time = 0
-        self.duration = 0
+    def __init__(self, record, sampling_rate, signals):
+        self.record = record
+        self.sampling_rate = sampling_rate
+        self.signals = signals
+        self.has_vf = False
+        self.has_artifact = False
 
 
 class Record:
@@ -40,7 +40,7 @@ class Record:
         self.signals = []
         self.annotations = []
         self.name = ""
-        self.sample_rate = 0
+        self.sampling_rate = 0
 
     def load(self, db_name, record):
         record_name = "{0}/{1}".format(db_name, record)
@@ -50,7 +50,7 @@ class Record:
         n_channels = wfdb.isigopen(record_name, None, 0)
 
         # query sampling rate of the record
-        self.sample_rate = wfdb.sampfreq(record_name)
+        self.sampling_rate = wfdb.sampfreq(record_name)
 
         # read the signals
         sigInfo = (wfdb.WFDB_Siginfo * n_channels)()
@@ -86,15 +86,14 @@ class Record:
         self.annotations = annotations
 
     def get_total_time(self):
-        return len(self.signals) / self.sample_rate
+        return len(self.signals) / self.sampling_rate
 
     # perform segmentation
     def get_segments(self, duration=8.0):
         n_samples = len(self.signals)
-        segment_size = int(self.sample_rate * duration)
+        segment_size = int(self.sampling_rate * duration)
         n_segments = int(np.floor(n_samples / segment_size))
         segments = []
-        labels = []
 
         annotations = self.annotations
         n_annotations = len(annotations)
@@ -105,9 +104,11 @@ class Record:
             # split the segment
             segment_begin = i_seg * segment_size
             segment_end = segment_begin + segment_size
-            segment = self.signals[segment_begin:segment_end]
-            segments.append(segment)
-            contains_vf = in_vf_episode  # label of the segment
+
+            segment_signals = self.signals[segment_begin:segment_end]
+            segment = Segment(record=self.name, sampling_rate=self.sampling_rate, signals=segment_signals)
+
+            segment.has_vf = in_vf_episode  # label of the segment
             has_noise = False
             # handle annotations belonging to this segment
             while i_ann < n_annotations:
@@ -118,12 +119,12 @@ class Record:
                             in_vf_episode = False
                     else:  # current rhythm is not Vf
                         if code == "[" or rhythm_type.startswith("(V"):  # begin of Vf found
-                            contains_vf = in_vf_episode = True
+                            segment.has_vf = in_vf_episode = True
                     i_ann += 1
                 else:
                     break
-            labels.append(1 if contains_vf else 0)
-        return np.array(segments), np.array(labels)
+            segments.append(segment)
+        return segments
 
 
 def extract_features_job(s):
@@ -157,30 +158,23 @@ def load_all_segments():
                 record = Record()
                 record.load(db_name, record_name)
 
-                print "  sample rate:", record.sample_rate, "# of samples:", len(record.signals), ", # of anns:", len(record.annotations)
+                print "  sample rate:", record.sampling_rate, "# of samples:", len(record.signals), ", # of anns:", len(record.annotations)
 
-                segments, labels = record.get_segments(segment_duration)
-                print "  segments:", len(segments), ", segment size:", len(segments[0])
-                print "  # of vf segments (label=1):", np.sum(labels)
+                segments = record.get_segments(segment_duration)
+                labels = [1 if segment.has_vf else 0 for segment in segments]
 
                 n_vf = np.sum(labels)
                 n_non_vf = len(segments) - n_vf
                 output.write('"{0}","{1}",{2},{3}\n'.format(db_name, record_name, n_vf, n_non_vf))
+                print "  segments:", (n_vf + n_non_vf), "# of vf segments (label=1):", n_vf
 
                 for segment in segments:
                     # resample to DEFAULT_SAMPLING_RATE as needed
-                    if record.sample_rate != DEFAULT_SAMPLING_RATE:
-                        segment = scipy.signal.resample(segment, DEFAULT_SAMPLING_RATE * segment_duration)
-
-                    all_segments.append((db_name, record_name, segment, record.sample_rate))
+                    signals = segment.signals
+                    if segment.sampling_rate != DEFAULT_SAMPLING_RATE:
+                        signals = scipy.signal.resample(signals, DEFAULT_SAMPLING_RATE * segment_duration)
+                    all_segments.append((db_name, record_name, signals, segment.sampling_rate))
                 all_labels.extend(labels)
-
-        '''
-        for segment, has_vf in zip(all_segments, all_labels):
-            if has_vf:
-                plt.plot(segment[2])
-                plt.show()
-        '''
 
         wfdb.wfdbquit()
         output.close()
