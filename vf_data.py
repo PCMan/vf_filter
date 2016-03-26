@@ -35,6 +35,20 @@ class Segment:
         self.has_artifact = False
 
 
+class Annotation:
+    # ann is an instance of wfdb.WFDB_Annotation
+    def __init__(self, ann):
+        self.time = ann.time
+        ann_code = ord(ann.anntyp)
+        self.code = wfdb.annstr(ann_code)
+        self.sub_type = ord(ann.subtyp)
+        self.rhythm_type = ""
+        if ann.aux:
+            # the first byte of aux is the length of the string
+            aux_ptr = cast(ann.aux, c_void_p).value + 1  # skip the first byte
+            self.rhythm_type = cast(aux_ptr, c_char_p).value
+
+
 class Record:
     def __init__(self):
         self.signals = []
@@ -73,14 +87,8 @@ class Record:
             ann_buf = (wfdb.WFDB_Annotation * n_channels)()
             while wfdb.getann(0, byref(ann_buf)) == 0:
                 ann = ann_buf[0]  # we only want the first channel
-                ann_code = ord(ann.anntyp)
-                rhythm_type = ""
-                if ann.aux:
-                    # the first byte of aux is the length of the string
-                    aux_ptr = cast(ann.aux, c_void_p).value + 1  # skip the first byte
-                    rhythm_type = cast(aux_ptr, c_char_p).value
-                # print ann.time, wfdb.anndesc(ann_code), wfdb.annstr(ann_code), rhythm_type
-                annotations.append((ann.time, wfdb.annstr(ann_code), rhythm_type))
+                annotation = Annotation(ann)
+                annotations.append(annotation)
 
         self.signals = signals
         self.annotations = annotations
@@ -99,7 +107,7 @@ class Record:
         n_annotations = len(annotations)
         i_ann = 0
         in_vf_episode = False
-        # in_noise = False
+        in_artifacts = False
         for i_seg in range(n_segments):
             # split the segment
             segment_begin = i_seg * segment_size
@@ -109,20 +117,35 @@ class Record:
             segment = Segment(record=self.name, sampling_rate=self.sampling_rate, signals=segment_signals)
 
             segment.has_vf = in_vf_episode  # label of the segment
-            has_noise = False
+            segment.has_artifact = in_artifacts
             # handle annotations belonging to this segment
             while i_ann < n_annotations:
-                ann_time, code, rhythm_type = annotations[i_ann]
-                if ann_time < segment_end:
+                ann = annotations[i_ann]
+                if ann.time < segment_end:
+                    code = ann.code
+                    rhythm_type = ann.rhythm_type
                     if in_vf_episode:  # current rhythm is Vf
                         if code == "]" or not rhythm_type.startswith("(V"):  # end of Vf found
                             in_vf_episode = False
                     else:  # current rhythm is not Vf
                         if code == "[" or rhythm_type.startswith("(V"):  # begin of Vf found
                             segment.has_vf = in_vf_episode = True
+                    if code == "|":  # isolated artifact
+                        segment.has_artifact = True
+                    elif code == "~":  # change in quality
+                        if ann.sub_type != 0:  # has noise or unreadable
+                            segment.has_artifact = in_artifacts = True
+                        else:
+                            in_artifacts = False
                     i_ann += 1
                 else:
                     break
+            '''
+            if segment.has_artifact:
+                import matplotlib.pyplot as plt
+                plt.plot(segment.signals)
+                plt.show()
+            '''
             segments.append(segment)
         return segments
 
@@ -161,32 +184,34 @@ def load_all_segments():
                 print "  sample rate:", record.sampling_rate, "# of samples:", len(record.signals), ", # of anns:", len(record.annotations)
 
                 segments = record.get_segments(segment_duration)
-                labels = [1 if segment.has_vf else 0 for segment in segments]
 
-                n_vf = np.sum(labels)
+                n_vf = np.sum([1 if segment.has_vf else 0 for segment in segments])
                 n_non_vf = len(segments) - n_vf
                 output.write('"{0}","{1}",{2},{3}\n'.format(db_name, record_name, n_vf, n_non_vf))
                 print "  segments:", (n_vf + n_non_vf), "# of vf segments (label=1):", n_vf
 
                 for segment in segments:
+                    if segment.has_artifact:  # exclude segments with artifacts
+                        continue
                     # resample to DEFAULT_SAMPLING_RATE as needed
                     signals = segment.signals
                     if segment.sampling_rate != DEFAULT_SAMPLING_RATE:
                         signals = scipy.signal.resample(signals, DEFAULT_SAMPLING_RATE * segment_duration)
                     all_segments.append((db_name, record_name, signals, segment.sampling_rate))
-                all_labels.extend(labels)
-
+                    all_labels.append(1 if segment.has_vf else 0)
         wfdb.wfdbquit()
         output.close()
 
         # cache the segments
+        '''
         try:
             with open(segments_cache_name, "wb") as f:
                 pickle.dump(all_segments, f)
                 pickle.dump(all_labels, f)
         except Exception:
             pass
-
+        '''
+    print "segments:", len(all_segments), ", # of VT/Vf:", np.sum(all_labels)
     return all_segments, all_labels
 
 

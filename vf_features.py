@@ -308,7 +308,7 @@ def extract_features(samples, sampling_rate):
     # features.append(spen)
 
     # MAV
-    mav = mean_absolute_value(samples, sampling_rate)
-    features.append(mav)
+    # mav = mean_absolute_value(samples, sampling_rate)
+    # features.append(mav)
 
     return features
