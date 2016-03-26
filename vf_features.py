@@ -107,6 +107,32 @@ def modified_exponential(samples):
     return 0.0
 
 
+# Mean absolute value (MAV)
+# Emran M Abu Anas et al. 2010. Sequential algorithm for life threatening cardiac pathologies detection based on
+# mean signal strength and EMD functions.
+# http://biomedical-engineering-online.biomedcentral.com/articles/10.1186/1475-925X-9-43
+def mean_absolute_value(samples, sampling_rate, window_duration=2.0):
+    # pre-processing: mean subtraction
+    # FIXME: move this to extract_feature()
+    samples = samples - np.mean(samples)
+    # FIXME: the samples we got here already received normalization, which is different from that in the original paper
+    n_samples = len(samples)
+    mavs = []
+    window_size = sampling_rate * window_duration
+    window_begin = 0
+    window_end = window_size
+    # 2-sec moving window with 1 sec step
+    while window_end <= n_samples:
+        # normalization within the window
+        window_samples = samples[window_begin:window_end]
+        window_samples /= np.max(window_samples)
+        mavs.append(np.mean(window_samples))
+        # move to next frame
+        window_begin += sampling_rate
+        window_end += sampling_rate
+    return np.mean(mavs)
+
+
 # Bandpass filter:
 # http://scipy.github.io/old-wiki/pages/Cookbook/ButterworthBandpass
 def butter_bandpass(lowcut, highcut, fs, order=5):
@@ -216,15 +242,19 @@ def lz_complexity(samples):
 
 # extract features from raw sample points of the original ECG signal
 def extract_features(samples, sampling_rate):
-    # normalize the input ECG sequence
-    samples = (samples - np.min(samples)) / (np.max(samples) - np.min(samples))
-
-    # band pass filter
-    samples = butter_bandpass_filter(samples, 1, 30, sampling_rate)
-
     features = []
     n_samples = len(samples)
     duration = int(n_samples / sampling_rate)
+
+    # FIXME: perform mean subtraction here?
+    # normalize the input ECG sequence
+    samples = (samples - np.min(samples)) / (np.max(samples) - np.min(samples))
+
+    # FIXME: bamd pass filter after normalization seems to give better results, but
+    # some algorithms requires normalization after filtering. :-(
+
+    # band pass filter
+    samples = butter_bandpass_filter(samples, 1, 30, sampling_rate)
 
     # Time domain/morphology
     # -------------------------------------------------
@@ -276,5 +306,9 @@ def extract_features(samples, sampling_rate):
     # sample entropy (SpEn)
     # spen = sample_entropy(samples, 5 * sampling_rate)
     # features.append(spen)
+
+    # MAV
+    mav = mean_absolute_value(samples, sampling_rate)
+    features.append(mav)
 
     return features
