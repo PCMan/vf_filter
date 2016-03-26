@@ -85,25 +85,6 @@ class Record:
         self.signals = signals
         self.annotations = annotations
 
-    def get_vf_episodes(self):
-        annotations = self.annotations
-        n_samples = len(self.signals)
-        episodes = []
-        vf_begin = -1
-        for (ann_time, code, rhythm_type) in annotations:
-            if vf_begin > 0:  # current rhythm is Vf
-                if code == "]" or not rhythm_type.startswith("(V"):
-                    vf_end = ann_time
-                    episodes.append((vf_begin, vf_end))
-                    vf_begin = -1
-            else:  # no Vf
-                if code == "[" or rhythm_type.startswith("(V"):
-                    vf_begin = ann_time
-        if vf_begin > 0:
-            episodes.append((vf_begin, n_samples))
-
-        return episodes
-
     def get_total_time(self):
         return len(self.signals) / self.sample_rate
 
@@ -115,30 +96,33 @@ class Record:
         segments = []
         labels = []
 
-        vf_episodes = self.get_vf_episodes()
-        n_episodes = len(vf_episodes)
-        current_episode = 0
-        for i in range(n_segments):
+        annotations = self.annotations
+        n_annotations = len(annotations)
+        i_ann = 0
+        in_vf_episode = False
+        # in_noise = False
+        for i_seg in range(n_segments):
             # split the segment
-            segment_begin = i * segment_size
+            segment_begin = i_seg * segment_size
             segment_end = segment_begin + segment_size
             segment = self.signals[segment_begin:segment_end]
             segments.append(segment)
-
-            # try to label the segment
-            has_vf = 0
-            if current_episode < n_episodes:
-                # check if the segment is overlapped with the current Vf episode
-                (vf_begin, vf_end) = vf_episodes[current_episode]
-                if vf_begin <= segment_begin <= vf_end:
-                    has_vf = 1
-                elif vf_begin <= segment_end <= vf_end:
-                    has_vf = 1
-                elif vf_begin >= segment_begin and vf_end <= segment_end:
-                    has_vf = 1
-                if segment_end >= vf_end:
-                    current_episode += 1
-            labels.append(has_vf)
+            contains_vf = in_vf_episode  # label of the segment
+            has_noise = False
+            # handle annotations belonging to this segment
+            while i_ann < n_annotations:
+                ann_time, code, rhythm_type = annotations[i_ann]
+                if ann_time < segment_end:
+                    if in_vf_episode:  # current rhythm is Vf
+                        if code == "]" or not rhythm_type.startswith("(V"):  # end of Vf found
+                            in_vf_episode = False
+                    else:  # current rhythm is not Vf
+                        if code == "[" or rhythm_type.startswith("(V"):  # begin of Vf found
+                            contains_vf = in_vf_episode = True
+                    i_ann += 1
+                else:
+                    break
+            labels.append(1 if contains_vf else 0)
         return np.array(segments), np.array(labels)
 
 
