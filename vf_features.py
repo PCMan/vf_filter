@@ -159,7 +159,7 @@ def sample_entropy(samples, window_size):
     window_end = window_size
     n_samples = len(samples)
     results = []
-    while window_end < n_samples:
+    while window_end <= n_samples:
         # Ref: Haiyan Li. 2009 Detecting Ventricular Fibrillation by Fast Algorithm of Dynamic Sample Entropy
         # N = 1250 , r = 0.2 x SD, m = 2 worked well for the characterization ECG signals.
         # N = 1250 = 250 Hz x 5 seconds (5-sec window)
@@ -286,7 +286,8 @@ def extract_features(samples, sampling_rate):
 
     # sample entropy (SpEn)
     # spen = sample_entropy(samples, 5 * sampling_rate)
-    # features.append(spen)
+    spen = pyeeg.samp_entropy(samples, M=2, R=0.2)
+    features.append(spen)
 
     # MAV
     # mav = mean_absolute_value(samples, sampling_rate)

@@ -10,7 +10,7 @@ from sklearn import grid_search
 from vf_data import load_data
 
 
-N_JOBS = 4
+N_JOBS = 6
 N_CV_FOLDS = 10
 CV_SCORING = "accuracy"
 
