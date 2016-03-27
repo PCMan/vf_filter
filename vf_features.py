@@ -147,6 +147,16 @@ def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
     return y
 
 
+def moving_average(samples, order=5):
+    # https://www.otexts.org/fpp/6/2
+    n_samples = len(samples)
+    ma = np.zeros(n_samples - order + 1)
+    k = int(order / 2)
+    for t in range(k, n_samples - k):
+        ma[t - k] = np.mean(samples[(t - k):(t + k + 1)])
+    return ma
+
+
 # find the peak frequency and its index in the FFT spectrum
 def find_peak_freq(fft, fft_freq):
     peak_freq_idx = fft[:len(fft)/2].argmax()
@@ -250,7 +260,8 @@ def extract_features(samples, sampling_rate):
     # perform mean subtraction
     samples = samples - np.mean(samples)
 
-    # TODO: 5-order moving average
+    # 5-order moving average
+    samples = moving_average(samples, order=5)
 
     # FIXME: bamd pass filter after normalization seems to give better results, but
     # some algorithms requires normalization after filtering. :-(
