@@ -263,7 +263,7 @@ def load_data(n_jobs):
                 feature, label = item
                 x_data.append(feature)
                 y_data.append(label)
-                print "feature:", len(x_data), label
+                print "feature:", len(x_data), feature, label
             except Exception:
                 break
         x_data = np.array(x_data)

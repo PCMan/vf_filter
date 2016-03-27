@@ -22,7 +22,7 @@ def main():
     print "Summary:\n", "# of segments:", len(x_data), "# of VT/Vf:", np.sum(y_data)
     # normalize the features
     preprocessing.normalize(x_data)
-    x_train, x_test, y_train, y_test = cross_validation.train_test_split(x_data, y_data, test_size=0.2)
+    x_train, x_test, y_train, y_test = cross_validation.train_test_split(x_data, y_data, test_size=0.3, stratify=y_data)
 
     # Logistic regression
     estimator = linear_model.LogisticRegressionCV(scoring=CV_SCORING)

@@ -8,66 +8,35 @@ import pyeeg
 
 
 # time domain/morphology
-# get the index of threshold crossing points in the segment
-def threshold_crossing(samples, threshold):
-    crossing = []
-    high = samples[0] >= threshold
-    for i, sample in enumerate(samples):
-        if high:
+
+def threshold_crossing_count(samples, threshold_ratio=0.2):
+    threshold = threshold_ratio * np.max(samples)
+    n_cross = 0
+    higher = samples[0] >= threshold
+    for sample in samples:
+        if higher:
             if sample < threshold:
-                crossing.append(i)
-                high = False
+                n_cross += 1
+                higher = False
         else:
             if sample >= threshold:
-                crossing.append(i)
-                high = True
-    return crossing
-
-'''
-def average_tci(crossing, n_samples, sampling_rate):
-    window_size = 3 * sampling_rate
-    window_begin = 0
-    window_end = window_size
-    tcis = []
-    n_crossing = 0
-    for i, crossing_idx in enumerate(crossing):
-        if crossing_idx >= window_end:
-            # end of the current window and begin of the next window
-            window_end += window_size
-            if window_end > n_samples:
-                break
-            window_begin += window_size
-            # calculate TCI
-            t1 = crossing[i - 1]
-            t2 = 0
-            t3 = 0
-            t4 = crossing[i + 1]
-            tci = 1000/((n_crossing - 1) + t2 / (t1 + t2) + t3 / (t3 + t4))
-            tcis.append(tci)
-            n_crossing = 0
-        n_crossing += 1
-    # calculate average of all windows
-    return np.mean(tcis) if tcis else 0.0
-'''
+                n_cross += 1
+                higher = True
+    return n_cross
 
 
-def average_tcsc(crossing, n_samples, sampling_rate, window_duration):
+# threshold crossing count
+def average_tcsc(samples, n_samples, sampling_rate, window_duration, threshold_ratio=0.2):
     window_size = window_duration * sampling_rate
     window_begin = 0
     window_end = window_size
     tcsc = []
-    n_crossing = 0
-    for i, crossing_idx in enumerate(crossing):
-        if crossing_idx >= window_end:
-            # end of the current window and begin of the next window
-            # right shift the window by 1 second
-            window_end += sampling_rate
-            if window_end > n_samples:
-                break
-            window_begin += sampling_rate
-            tcsc.append(n_crossing)
-            n_crossing = 0
-        n_crossing += 1
+    while window_end <= n_samples:
+        window = samples[window_begin:window_end]
+        n_cross = threshold_crossing_count(window, threshold_ratio)
+        tcsc.append(n_cross)
+        window_begin += sampling_rate
+        window_end += sampling_rate
     # calculate average of all windows
     return np.mean(tcsc) if tcsc else 0.0
 
@@ -82,14 +51,12 @@ def standard_exponential(samples, sampling_rate, time_constant=3):
     max_amplitude = samples[max_time]
     time_constant *= sampling_rate  # convert time from second to samples
 
-    def func(t):
-        return max_amplitude * np.exp(-np.abs(t - max_time) / time_constant)
-
+    # exp_func(t) = max_amplitude * np.exp(-np.abs(t - max_time) / time_constant)
     # calculate intersections n of this curve with the ECG signal
     n_crosses = 0.0
-    higher = True if samples[0] > func(0) else False
+    higher = True if samples[0] > max_amplitude * np.exp(-np.abs(0 - max_time) / time_constant) else False
     for t in range(1, len(samples) - 1):
-        threshold = func(t)
+        threshold = max_amplitude * np.exp(-np.abs(t - max_time) / time_constant)
         sample = samples[t]
         if higher:
             if sample < threshold:
@@ -272,11 +239,12 @@ def extract_features(samples, sampling_rate):
     # Time domain/morphology
     # -------------------------------------------------
     # Threshold crossing interval (TCI) and Threshold crossing sample count (TCSC)
+
     # get all crossing points, use 20% of maximum as threshold
-    crossing = threshold_crossing(samples, threshold=0.2)
     # calculate average TCSC using a 3-s window
     # using 3-s moving window
-    features.append(average_tcsc(crossing, len(samples), sampling_rate=sampling_rate, window_duration=3))
+    tcsc = average_tcsc(samples, len(samples), sampling_rate=sampling_rate, window_duration=3, threshold_ratio=0.2)
+    features.append(tcsc)
 
     # Standard exponential (STE)
     ste = standard_exponential(samples, sampling_rate)
