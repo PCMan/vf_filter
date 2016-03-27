@@ -113,8 +113,6 @@ def modified_exponential(samples):
 # http://biomedical-engineering-online.biomedcentral.com/articles/10.1186/1475-925X-9-43
 def mean_absolute_value(samples, sampling_rate, window_duration=2.0):
     # pre-processing: mean subtraction
-    # FIXME: move this to extract_feature()
-    samples = samples - np.mean(samples)
     # FIXME: the samples we got here already received normalization, which is different from that in the original paper
     n_samples = len(samples)
     mavs = []
@@ -246,9 +244,13 @@ def extract_features(samples, sampling_rate):
     n_samples = len(samples)
     duration = int(n_samples / sampling_rate)
 
-    # FIXME: perform mean subtraction here?
     # normalize the input ECG sequence
     samples = (samples - np.min(samples)) / (np.max(samples) - np.min(samples))
+
+    # perform mean subtraction
+    samples = samples - np.mean(samples)
+
+    # TODO: 5-order moving average
 
     # FIXME: bamd pass filter after normalization seems to give better results, but
     # some algorithms requires normalization after filtering. :-(
@@ -259,7 +261,7 @@ def extract_features(samples, sampling_rate):
     # Time domain/morphology
     # -------------------------------------------------
     # Threshold crossing interval (TCI) and Threshold crossing sample count (TCSC)
-    # get all crossing points
+    # get all crossing points, use 20% of maximum as threshold
     crossing = threshold_crossing(samples, threshold=0.2)
     # calculate average TCSC using a 3-s window
     # using 3-s moving window
