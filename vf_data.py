@@ -7,7 +7,7 @@ import wfdb
 from vf_features import extract_features
 # import pickle
 import cPickle as pickle  # python 2 only
-from multiprocessing import Pool
+import multiprocessing as mp
 
 
 DEFAULT_SAMPLING_RATE = 360.0
@@ -150,25 +150,31 @@ class Record:
         return segments
 
 
-def extract_features_job(s):
-    db_name, record_name, segment, sample_rate = s
-    return extract_features(segment, sampling_rate=DEFAULT_SAMPLING_RATE)
-
-
-def load_all_segments():
+# segment_queue is a multiprocessing.Queue
+def load_all_segments(segment_queue):
     segments_cache_name = "all_segments.dat"
     segment_duration = 8  # 8 sec per segment
-    all_segments = []
-    all_labels = []
+    loaded_from_cache = False
+
     # load cached segments if they exist
     try:
-        with open(segments_cache_name, "rb") as f:
-            all_segments = pickle.load(f)
-            all_labels = pickle.load(f)
+        with open(segments_cache_name, "rb") as cache_file:
+            loaded_from_cache = True
+            while True:
+                segment = pickle.load(cache_file)
+                if segment:
+                    segment_queue.put(segment)
+                else:
+                    break
     except Exception:
         pass
 
-    if not all_segments or not all_labels:
+    if not loaded_from_cache:
+        try:
+            cache_file = open(segments_cache_name, "wb")
+        except Exception:
+            cache_file = None
+
         # mitdb and vfdb contain two channels, but we only use the first one here
         # data source sampling rate:
         # mitdb: 360 Hz
@@ -180,8 +186,7 @@ def load_all_segments():
                 print "read record:", db_name, record_name
                 record = Record()
                 record.load(db_name, record_name)
-
-                print "  sample rate:", record.sampling_rate, "# of samples:", len(record.signals), ", # of anns:", len(record.annotations)
+                # print "  sample rate:", record.sampling_rate, "# of samples:", len(record.signals), ", # of anns:", len(record.annotations)
 
                 segments = record.get_segments(segment_duration)
 
@@ -193,52 +198,76 @@ def load_all_segments():
                 for segment in segments:
                     if segment.has_artifact:  # exclude segments with artifacts
                         continue
-                    # resample to DEFAULT_SAMPLING_RATE as needed
-                    signals = segment.signals
-                    if segment.sampling_rate != DEFAULT_SAMPLING_RATE:
-                        signals = scipy.signal.resample(signals, DEFAULT_SAMPLING_RATE * segment_duration)
-                    all_segments.append((db_name, record_name, signals, segment.sampling_rate))
-                    all_labels.append(1 if segment.has_vf else 0)
+                    segment_queue.put(segment)
+
+                    if cache_file:  # cache the segment
+                        pickle.dump(segment, cache_file)
+
         wfdb.wfdbquit()
         output.close()
+        if cache_file:
+            cache_file.close()
 
-        # cache the segments
-        '''
-        try:
-            with open(segments_cache_name, "wb") as f:
-                pickle.dump(all_segments, f)
-                pickle.dump(all_labels, f)
-        except Exception:
-            pass
-        '''
-    print "segments:", len(all_segments), ", # of VT/Vf:", np.sum(all_labels)
-    return all_segments, all_labels
+    segment_queue.put(None)  # mark end of queue
 
 
-def load_data():
+def extract_features_job(segment_queue, features_queue):
+    segment_duration = 8  # 8 sec per segment
+    while True:
+        segment = segment_queue.get()
+        if segment is None:
+            segment_queue.put(None)  # propagate the ending signal to other processes
+            features_queue.put(None)  # mark the end of output
+            break
+        # resample to DEFAULT_SAMPLING_RATE as needed
+        signals = segment.signals
+        if segment.sampling_rate != DEFAULT_SAMPLING_RATE:
+            signals = scipy.signal.resample(signals, DEFAULT_SAMPLING_RATE * segment_duration)
+        features = extract_features(signals, DEFAULT_SAMPLING_RATE)
+        label = 1 if segment.has_vf else 0
+        features_queue.put((features, label))
+
+
+def load_data(n_jobs):
     features_cache_name = "features.dat"
     x_data = []
     y_data = []
-    # load cached segments if they exist
+    # load cached features if they exist
     try:
         with open(features_cache_name, "rb") as f:
             x_data = pickle.load(f)
             y_data = pickle.load(f)
     except Exception:
-        all_segments, all_labels = load_all_segments()
+        # load segments and perform feature extraction
+        # here we use multiprocessing for speed up.
+        segment_queue = mp.Queue()  # input
+        features_queue = mp.Queue()  # output
 
-        # use multiprocessing for speed up.
-        print "start feature extraction..."
-        pool = Pool(N_JOBS)
-        x_data = pool.map(extract_features_job, all_segments)
-        '''
+        # start reader processes (multiprocessing.Pool is too limited, so let's use Queue here)
+        reader_jobs = [mp.Process(target=extract_features_job, args=(segment_queue, features_queue)) for i in range(n_jobs)]
+        for job in reader_jobs:
+            job.start()
+
+        # start feeding data into the segment_queue from another process
+        writer_job = mp.Process(target=load_all_segments, args=(segment_queue, ))
+        writer_job.start()
+
+        # receive extracted features from the worker processes
         x_data = []
-        for db_name, record_name, segment, sample_rate in all_segments:
-            # convert segment values to features
-            x_data.append(extract_features(segment, sampling_rate=sample_rate))
-        '''
+        y_data = []
+        while True:
+            try:
+                item = features_queue.get()
+                if item is None:
+                    break
+                feature, label = item
+                x_data.append(feature)
+                y_data.append(label)
+                print "feature:", len(x_data), label
+            except Exception:
+                break
         x_data = np.array(x_data)
-        y_data = np.array(all_labels)
+        y_data = np.array(y_data)
 
         # cache the data
         try:
