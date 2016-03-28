@@ -11,7 +11,7 @@ from vf_data import load_data
 
 
 N_JOBS = 6
-N_CV_FOLDS = 5
+N_CV_FOLDS = 10
 CV_SCORING = "accuracy"
 
 

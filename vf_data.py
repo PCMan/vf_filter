@@ -10,7 +10,7 @@ import cPickle as pickle  # python 2 only
 import multiprocessing as mp
 
 
-DEFAULT_SAMPLING_RATE = 250.0
+DEFAULT_SAMPLING_RATE = 360.0
 N_JOBS = 4
 
 
@@ -27,10 +27,11 @@ def get_records(db_name):
 
 
 class Segment:
-    def __init__(self, record, sampling_rate, signals):
+    def __init__(self, record, sampling_rate, signals, begin_time):
         self.record = record
         self.sampling_rate = sampling_rate
         self.signals = signals
+        self.begin_time = 0  # in terms of sample number
         self.has_vf = False
         self.has_artifact = False
 
@@ -119,7 +120,7 @@ class Record:
             if segment_signals.dtype != "float64":
                 segment_signals = segment_signals.astype("float64")
 
-            segment = Segment(record=self.name, sampling_rate=self.sampling_rate, signals=segment_signals)
+            segment = Segment(record=self.name, sampling_rate=self.sampling_rate, signals=segment_signals, begin_time=segment_begin)
 
             segment.has_vf = in_vf_episode  # label of the segment
             segment.has_artifact = in_artifacts
