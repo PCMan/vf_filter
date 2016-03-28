@@ -10,7 +10,7 @@ import cPickle as pickle  # python 2 only
 import multiprocessing as mp
 
 
-DEFAULT_SAMPLING_RATE = 360.0
+DEFAULT_SAMPLING_RATE = 250.0
 N_JOBS = 4
 
 
@@ -114,6 +114,11 @@ class Record:
             segment_end = segment_begin + segment_size
 
             segment_signals = self.signals[segment_begin:segment_end]
+            # convert to float first for later calculations
+            # FIXME: this seems to be a python2 problem?
+            if segment_signals.dtype != "float64":
+                segment_signals = segment_signals.astype("float64")
+
             segment = Segment(record=self.name, sampling_rate=self.sampling_rate, signals=segment_signals)
 
             segment.has_vf = in_vf_episode  # label of the segment
@@ -140,12 +145,6 @@ class Record:
                     i_ann += 1
                 else:
                     break
-            '''
-            if segment.has_artifact:
-                import matplotlib.pyplot as plt
-                plt.plot(segment.signals)
-                plt.show()
-            '''
             segments.append(segment)
         return segments
 

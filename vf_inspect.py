@@ -3,6 +3,7 @@ import vf_features
 import cPickle as pickle  # python 2 only
 import numpy as np
 import matplotlib.pyplot as plt
+import sys
 
 
 def main():
@@ -20,11 +21,12 @@ def main():
                 else:
                     break
                 if show:
-                    features = vf_features.extract_features(segment.signals, segment.sampling_rate)
+                    features = vf_features.extract_features(segment.signals, segment.sampling_rate, plotting=True)
                     print segment.record, segment.sampling_rate, features
                     plt.plot(segment.signals)
                     plt.show()
     except Exception:
+        print sys.exc_info()
         pass
 if __name__ == '__main__':
     main()
