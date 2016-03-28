@@ -73,8 +73,8 @@ def standard_exponential(samples, sampling_rate, time_constant=3):
 
 
 def find_first_local_maximum(x, start=0, threshold=0.0):
-    for i in range(start + 1, len(x)):
-        if x[i] - x[i - 1] <= 0 and x[i] >= threshold:
+    for i in range(start + 1, len(x) - 1):
+        if (x[i] - x[i - 1]) >= 0 >= (x[i + 1] - x[i]) and (x[i] >= threshold):
             return i
     return -1
 
@@ -96,21 +96,31 @@ def modified_exponential(samples, sampling_rate, peak_threshold=0.2, time_consta
     # Let's set a simple threshold here. :-(
     peak_threshold *= np.max(samples)
     max_time = find_first_local_maximum(samples, start=0, threshold=peak_threshold)
-    next_max_time = find_first_local_maximum(samples, start=max_time, threshold=peak_threshold)
-    for t in range(max_time, n_samples):
+    t = max_time + 1
+    # exp_value = list(samples[0:t])
+    while t < n_samples:
         sample = samples[t]
         # calculate the exponential value
         local_max = samples[max_time]
         et = local_max * np.exp(-float(t - max_time) / time_constant)
+        # exp_value.append(et)
         if et < sample:  # cross happens
             # lift the curve again
             n_lifted += 1
             # find next local maximum
-            if next_max_time == -1:
+            max_time = find_first_local_maximum(samples, start=t, threshold=peak_threshold)
+            if max_time == -1:
                 break
-            max_time = next_max_time
-            next_max_time = find_first_local_maximum(samples, start=max_time, threshold=peak_threshold)
+            # exp_value.extend(samples[t + 1:max_time + 1])
+            t = max_time + 1
+        else:
+            t += 1
 
+    '''
+    plt.plot(samples)
+    plt.plot(exp_value)
+    plt.show()
+    '''
     duration = float(n_samples) / sampling_rate
     return float(n_lifted) / duration
 
@@ -347,8 +357,8 @@ def extract_features(samples, sampling_rate, plotting=False):
 
     # sample entropy (SpEn)
     # spen = sample_entropy(samples, 5 * sampling_rate)
-    spen = pyeeg.samp_entropy(samples, M=2, R=0.2)
-    features.append(spen)
+    # spen = pyeeg.samp_entropy(samples, M=2, R=0.2)
+    # features.append(spen)
 
     # MAV
     # mav = mean_absolute_value(samples, sampling_rate)
