@@ -10,7 +10,7 @@ import cPickle as pickle  # python 2 only
 import multiprocessing as mp
 
 
-DEFAULT_SAMPLING_RATE = 360.0
+DEFAULT_SAMPLING_RATE = 250.0
 N_JOBS = 4
 
 
