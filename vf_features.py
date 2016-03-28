@@ -5,6 +5,7 @@ import numpy as np
 from scipy.signal import butter, lfilter
 import sampen  # calculate sample entropy
 import pyeeg
+import matplotlib.pyplot as plt
 
 
 # time domain/morphology
@@ -22,6 +23,7 @@ def threshold_crossing_count(samples, threshold_ratio=0.2):
             if sample >= threshold:
                 n_cross += 1
                 higher = True
+    # print threshold, n_cross
     return n_cross
 
 
@@ -178,8 +180,6 @@ def sample_entropy(samples, window_size):
 # Xu-Sheng Zhang et al. 1999. Detecting Ventricular Tachycardia and Fibrillation by Complexity Measure
 def lz_complexity(samples):
     cn = 0
-    # pre-processing: mean subtraction
-    samples = samples - np.mean(samples)
 
     # find optimal threshold
     pos_peak = np.max(samples)  # positive peak
@@ -221,6 +221,10 @@ def extract_features(samples, sampling_rate):
     n_samples = len(samples)
     duration = int(n_samples / sampling_rate)
 
+    # convert to float first for later calculations
+    # FIXME: this seems to be a python2 problem?
+    samples = samples.astype("float64")
+
     # normalize the input ECG sequence
     samples = (samples - np.min(samples)) / (np.max(samples) - np.min(samples))
 
@@ -229,9 +233,6 @@ def extract_features(samples, sampling_rate):
 
     # 5-order moving average
     samples = moving_average(samples, order=5)
-
-    # FIXME: bamd pass filter after normalization seems to give better results, but
-    # some algorithms requires normalization after filtering. :-(
 
     # band pass filter
     samples = butter_bandpass_filter(samples, 1, 30, sampling_rate)
@@ -286,8 +287,8 @@ def extract_features(samples, sampling_rate):
 
     # sample entropy (SpEn)
     # spen = sample_entropy(samples, 5 * sampling_rate)
-    spen = pyeeg.samp_entropy(samples, M=2, R=0.2)
-    features.append(spen)
+    # spen = pyeeg.samp_entropy(samples, M=2, R=0.2)
+    # features.append(spen)
 
     # MAV
     # mav = mean_absolute_value(samples, sampling_rate)

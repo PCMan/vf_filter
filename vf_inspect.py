@@ -21,7 +21,7 @@ def main():
                     break
                 if show:
                     features = vf_features.extract_features(segment.signals, segment.sampling_rate)
-                    print segment.record, features
+                    print segment.record, segment.sampling_rate, features
                     plt.plot(segment.signals)
                     plt.show()
     except Exception:
