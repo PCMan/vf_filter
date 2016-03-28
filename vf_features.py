@@ -72,8 +72,47 @@ def standard_exponential(samples, sampling_rate, time_constant=3):
     return n_crosses / duration
 
 
-def modified_exponential(samples):
-    return 0.0
+def find_first_local_maximum(x, start=0, threshold=0.0):
+    for i in range(start + 1, len(x)):
+        if x[i] - x[i - 1] <= 0 and x[i] >= threshold:
+            return i
+    return -1
+
+
+def modified_exponential(samples, sampling_rate, peak_threshold=0.2, time_constant=0.2):
+    # similar to standard exponential, but uses relative max, not global max.
+    # lift the exponential curve to the relative max again at every intersection.
+    # E(t) = Mj * exp(-(t - tm,j) / T), tm,j <= t <= tc,j
+    # E(t) = given signal, tc,j <= t <= tm,j+1
+    #   Mj: the jth local maximum, tm,j: its time
+    #   T: time constant: default to 2.0 second
+    #   tc,j: the time value of cross
+    n_lifted = 0
+    samples = np.array(samples)
+    n_samples = len(samples)
+    time_constant = time_constant * sampling_rate  # in terms of samples
+    # find all local maximum and get their time values
+    # FIXME: the original paper does not describe how to correctly identify peaks.
+    # Let's set a simple threshold here. :-(
+    peak_threshold *= np.max(samples)
+    max_time = find_first_local_maximum(samples, start=0, threshold=peak_threshold)
+    next_max_time = find_first_local_maximum(samples, start=max_time, threshold=peak_threshold)
+    for t in range(max_time, n_samples):
+        sample = samples[t]
+        # calculate the exponential value
+        local_max = samples[max_time]
+        et = local_max * np.exp(-float(t - max_time) / time_constant)
+        if et < sample:  # cross happens
+            # lift the curve again
+            n_lifted += 1
+            # find next local maximum
+            if next_max_time == -1:
+                break
+            max_time = next_max_time
+            next_max_time = find_first_local_maximum(samples, start=max_time, threshold=peak_threshold)
+
+    duration = float(n_samples) / sampling_rate
+    return float(n_lifted) / duration
 
 
 # Mean absolute value (MAV)
@@ -271,6 +310,8 @@ def extract_features(samples, sampling_rate, plotting=False):
     features.append(ste)
 
     # Modified exponential (MEA)
+    mea = modified_exponential(samples, sampling_rate)
+    features.append(mea)
 
     # spectral parameters (characteristics of power spectrum)
     # -------------------------------------------------
@@ -306,8 +347,8 @@ def extract_features(samples, sampling_rate, plotting=False):
 
     # sample entropy (SpEn)
     # spen = sample_entropy(samples, 5 * sampling_rate)
-    # spen = pyeeg.samp_entropy(samples, M=2, R=0.2)
-    # features.append(spen)
+    spen = pyeeg.samp_entropy(samples, M=2, R=0.2)
+    features.append(spen)
 
     # MAV
     # mav = mean_absolute_value(samples, sampling_rate)
