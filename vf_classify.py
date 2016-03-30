@@ -15,6 +15,18 @@ N_CV_FOLDS = 10
 CV_SCORING = "accuracy"
 
 
+def classification_report(y_true, y_predict):
+    correct = (y_true == y_predict)
+    incorrect = np.logical_not(correct)
+    pred_negative = np.logical_not(y_predict)
+    tp = np.sum(np.logical_and(y_predict, correct))
+    fp = np.sum(np.logical_and(y_predict, incorrect))
+    tn = np.sum(np.logical_and(pred_negative, correct))
+    fn = np.sum(np.logical_and(pred_negative, incorrect))
+    print "tp =%d, fp = %d, tn = %d, fn = %d" % (tp, fp, tn, fn)
+    print "sensitivity:", float(tp) / (tp + fn), "specificity:", float(tn) / (tn + fp), "precision:", float(tp) / (tp + fp)
+
+
 def main():
 
     # load features
@@ -29,7 +41,7 @@ def main():
     estimator.fit(x_train, y_train)
     y_predict = estimator.predict(x_test)
     # print "Logistic regression: error:", float(np.sum(y_predict != y_test) * 100) / len(y_test), "%"
-    print "Logistic regression: precision:\n", metrics.classification_report(y_test, y_predict), estimator.scores_, "\n"
+    print "Logistic regression: precision:\n", classification_report(y_test, y_predict), estimator.scores_, "\n"
 
     # Random forest
     estimator = ensemble.RandomForestClassifier()
@@ -41,7 +53,7 @@ def main():
                                     n_jobs=N_JOBS, cv=N_CV_FOLDS, verbose=1)
     grid.fit(x_train, y_train)
     y_predict = grid.predict(x_test)
-    print "RandomForest:\n", metrics.classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n"
+    print "RandomForest:\n", classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n"
 
     # SVC with RBF kernel
     estimator = svm.SVC(shrinking=False, cache_size=1024, verbose=False)
@@ -53,7 +65,7 @@ def main():
                                     n_jobs=N_JOBS, cv=N_CV_FOLDS, verbose=1)
     grid.fit(x_train, y_train)
     y_predict = grid.predict(x_test)
-    print "SVC:\n", metrics.classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n"
+    print "SVC:\n", classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n"
 
     # AdaBoost decision tree
     estimator = ensemble.AdaBoostClassifier()
@@ -66,7 +78,7 @@ def main():
                                     n_jobs=N_JOBS, cv=N_CV_FOLDS, verbose=1)
     grid.fit(x_train, y_train)
     y_predict = grid.predict(x_test)
-    print "AdaBoost:\n", metrics.classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n"
+    print "AdaBoost:\n", classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n"
 
     # Gradient boosting
     estimator = ensemble.GradientBoostingClassifier()
@@ -80,7 +92,7 @@ def main():
                                     n_jobs=N_JOBS, cv=N_CV_FOLDS, verbose=1)
     grid.fit(x_train, y_train)
     y_predict = grid.predict(x_test)
-    print "Gradient Boosting:\n", metrics.classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n"
+    print "Gradient Boosting:\n", classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n"
 
 
 if __name__ == "__main__":
