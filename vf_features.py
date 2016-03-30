@@ -14,25 +14,23 @@ def threshold_crossing_count(samples, threshold_ratio=0.2):
     threshold = threshold_ratio * np.max(samples)
     n_cross = 0
     higher = samples[0] >= threshold
-    first_cross = None
-    last_cross = None
+    first_cross = -1
+    last_cross = -1
     for i in range(len(samples)):
         sample = samples[i]
         if higher:
             if sample < threshold:
                 n_cross += 1
-                if first_cross is None:
+                if first_cross == -1:
                     first_cross = i
-                else:
-                    last_cross = i
+                last_cross = i
                 higher = False
         else:
             if sample >= threshold:
                 n_cross += 1
-                if first_cross is None:
+                if first_cross == -1:
                     first_cross = i
-                else:
-                    last_cross = i
+                last_cross = i
                 higher = True
     # print threshold, n_cross
     return n_cross, first_cross, last_cross
@@ -63,7 +61,7 @@ def average_tci(samples, n_samples, sampling_rate, threshold_ratio=0.2):
     while window_end <= n_samples:
         window = samples[window_begin:window_end]
         n_cross, first_cross, last_cross = threshold_crossing_count(window, threshold_ratio)
-        results.append((n_cross, first_cross, last_cross))
+        results.append((n_cross, first_cross, (window_size - last_cross)))
         window_begin += sampling_rate
         window_end += sampling_rate
     # calculate average TCI of all windows
