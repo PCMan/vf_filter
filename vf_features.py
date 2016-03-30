@@ -14,20 +14,31 @@ def threshold_crossing_count(samples, threshold_ratio=0.2):
     threshold = threshold_ratio * np.max(samples)
     n_cross = 0
     higher = samples[0] >= threshold
-    for sample in samples:
+    first_cross = None
+    last_cross = None
+    for i in range(len(samples)):
+        sample = samples[i]
         if higher:
             if sample < threshold:
                 n_cross += 1
+                if first_cross is None:
+                    first_cross = i
+                else:
+                    last_cross = i
                 higher = False
         else:
             if sample >= threshold:
                 n_cross += 1
+                if first_cross is None:
+                    first_cross = i
+                else:
+                    last_cross = i
                 higher = True
     # print threshold, n_cross
-    return n_cross
+    return n_cross, first_cross, last_cross
 
 
-# threshold crossing count
+# average threshold crossing count
 def average_tcsc(samples, n_samples, sampling_rate, window_duration, threshold_ratio=0.2):
     window_size = window_duration * sampling_rate
     window_begin = 0
@@ -35,12 +46,38 @@ def average_tcsc(samples, n_samples, sampling_rate, window_duration, threshold_r
     tcsc = []
     while window_end <= n_samples:
         window = samples[window_begin:window_end]
-        n_cross = threshold_crossing_count(window, threshold_ratio)
+        n_cross, first_cross, last_cross = threshold_crossing_count(window, threshold_ratio)
         tcsc.append(n_cross)
         window_begin += sampling_rate
         window_end += sampling_rate
     # calculate average of all windows
     return np.mean(tcsc) if tcsc else 0.0
+
+
+# average threshold crossing interval
+def average_tci(samples, n_samples, sampling_rate, threshold_ratio=0.2):
+    window_size = sampling_rate  # calculate 1 TCI value per second
+    window_begin = 0
+    window_end = window_size
+    results = []
+    while window_end <= n_samples:
+        window = samples[window_begin:window_end]
+        n_cross, first_cross, last_cross = threshold_crossing_count(window, threshold_ratio)
+        results.append((n_cross, first_cross, last_cross))
+        window_begin += sampling_rate
+        window_end += sampling_rate
+    # calculate average TCI of all windows
+    # TCI is calculated for every 1 second sub segment, but for each TCI,
+    # we also requires some values from its previous and later segments
+    tcis = []
+    for i in range(1, len(results) - 1):
+        n, t2, t3 = results[i]
+        t1 = results[i - 1][1]   # last cross of the previous 1-s segment
+        t4 = results[i + 1][2]  # first cross of the next 1-s segment
+        tci = float(1000) / (n - 1 + t2/(t1 + t2) + t3/(t3 + t4))
+        tcis.append(tci)
+
+    return np.mean(tcis) if tcis else 0.0
 
 
 def standard_exponential(samples, sampling_rate, time_constant=3):
@@ -314,6 +351,10 @@ def extract_features(samples, sampling_rate, plotting=False):
     # using 3-s moving window
     tcsc = average_tcsc(samples, len(samples), sampling_rate=sampling_rate, window_duration=3, threshold_ratio=0.2)
     features.append(tcsc)
+
+    # average TCI for every 1-second segments
+    tci = average_tci(samples, len(samples), sampling_rate=sampling_rate, threshold_ratio=0.2)
+    features.append(tci)
 
     # Standard exponential (STE)
     ste = standard_exponential(samples, sampling_rate)
