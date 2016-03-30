@@ -12,7 +12,16 @@ from vf_data import load_data
 
 N_JOBS = 6
 N_CV_FOLDS = 10
-CV_SCORING = "accuracy"
+
+
+def balanced_error_rate(y_true, y_predict):
+    incorrect = (y_true != y_predict)
+    fp = np.sum(np.logical_and(y_predict, incorrect))
+    pred_negative = np.logical_not(y_predict)
+    fn = np.sum(np.logical_and(pred_negative, incorrect))
+    n_positive = np.sum(y_true)
+    n_negative = len(y_true) - n_positive
+    return  0.5 * (fn / n_positive + fp / n_negative)
 
 
 def classification_report(y_true, y_predict):
@@ -36,8 +45,11 @@ def main():
     preprocessing.normalize(x_data)
     x_train, x_test, y_train, y_test = cross_validation.train_test_split(x_data, y_data, test_size=0.3, stratify=y_data)
 
+    # BER-based scoring function
+    cv_scorer = metrics.make_scorer(balanced_error_rate, greater_is_better=False)
+
     # Logistic regression
-    estimator = linear_model.LogisticRegressionCV(scoring=CV_SCORING)
+    estimator = linear_model.LogisticRegressionCV(scoring=cv_scorer)
     estimator.fit(x_train, y_train)
     y_predict = estimator.predict(x_test)
     # print "Logistic regression: error:", float(np.sum(y_predict != y_test) * 100) / len(y_test), "%"
@@ -49,7 +61,7 @@ def main():
                                         "n_estimators": range(10, 110, 10)
                                     },
                                     n_iter=10,
-                                    scoring=CV_SCORING,
+                                    scoring=cv_scorer,
                                     n_jobs=N_JOBS, cv=N_CV_FOLDS, verbose=1)
     grid.fit(x_train, y_train)
     y_predict = grid.predict(x_test)
@@ -61,7 +73,7 @@ def main():
                                         "C": np.logspace(-2, 2, 5),
                                         "gamma": np.logspace(-2, 2, 5)
                                     },
-                                    scoring=CV_SCORING,
+                                    scoring=cv_scorer,
                                     n_jobs=N_JOBS, cv=N_CV_FOLDS, verbose=1)
     grid.fit(x_train, y_train)
     y_predict = grid.predict(x_test)
@@ -74,7 +86,7 @@ def main():
                                         "learning_rate": np.logspace(-2, 1, 4)
                                     },
                                     n_iter=20,
-                                    scoring=CV_SCORING,
+                                    scoring=cv_scorer,
                                     n_jobs=N_JOBS, cv=N_CV_FOLDS, verbose=1)
     grid.fit(x_train, y_train)
     y_predict = grid.predict(x_test)
@@ -88,7 +100,7 @@ def main():
                                         "max_depth": range(3, 10)
                                     },
                                     n_iter=20,
-                                    scoring=CV_SCORING,
+                                    scoring=cv_scorer,
                                     n_jobs=N_JOBS, cv=N_CV_FOLDS, verbose=1)
     grid.fit(x_train, y_train)
     y_predict = grid.predict(x_test)
