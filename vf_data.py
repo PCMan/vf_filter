@@ -31,7 +31,7 @@ class Segment:
         self.record = record
         self.sampling_rate = sampling_rate
         self.signals = signals
-        self.begin_time = 0  # in terms of sample number
+        self.begin_time = begin_time  # in terms of sample number
         self.has_vf = False
         self.has_artifact = False
 
@@ -225,18 +225,18 @@ def extract_features_job(segment_queue, features_queue):
             signals = scipy.signal.resample(signals, DEFAULT_SAMPLING_RATE * segment_duration)
         features = extract_features(signals, DEFAULT_SAMPLING_RATE)
         label = 1 if segment.has_vf else 0
-        features_queue.put((features, label))
+        features_queue.put((features, label, segment.record, segment.begin_time))
 
 
 def load_data(n_jobs):
     features_cache_name = "features.dat"
-    x_data = []
-    y_data = []
+    x_info = []
     # load cached features if they exist
     try:
         with open(features_cache_name, "rb") as f:
             x_data = pickle.load(f)
             y_data = pickle.load(f)
+            x_info = pickle.load(f)
     except Exception:
         # load segments and perform feature extraction
         # here we use multiprocessing for speed up.
@@ -260,10 +260,12 @@ def load_data(n_jobs):
                 item = features_queue.get()
                 if item is None:
                     break
-                feature, label = item
+                (feature, label, record, begin_time) = item
                 x_data.append(feature)
                 y_data.append(label)
-                print "feature:", len(x_data), feature, label
+                # store mapping of feature and the segment it's built from
+                x_info.append((record, begin_time))
+                print "feature", len(x_data), ":", record, begin_time, feature, label
             except Exception:
                 break
         x_data = np.array(x_data)
@@ -274,8 +276,9 @@ def load_data(n_jobs):
             with open(features_cache_name, "wb") as f:
                 pickle.dump(x_data, f)
                 pickle.dump(y_data, f)
+                pickle.dump(x_info, f)
         except Exception:
             pass
         print "features are extracted."
 
-    return x_data, y_data
+    return x_data, y_data, np.array(x_info)
