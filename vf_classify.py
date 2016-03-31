@@ -8,9 +8,10 @@ from sklearn import metrics
 from sklearn import svm
 from sklearn import grid_search
 from vf_data import load_data
+import multiprocessing as mp
 
 
-N_JOBS = 6
+N_JOBS = int(mp.cpu_count() / 2) if mp.cpu_count() > 1 else 1
 N_CV_FOLDS = 10
 
 

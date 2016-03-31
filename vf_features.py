@@ -16,7 +16,7 @@ def threshold_crossing_count(samples, threshold_ratio=0.2):
     higher = samples[0] >= threshold
     first_cross = -1
     last_cross = -1
-    for i in range(len(samples)):
+    for i in range(1, len(samples)):
         sample = samples[i]
         if higher:
             if sample < threshold:
@@ -33,6 +33,8 @@ def threshold_crossing_count(samples, threshold_ratio=0.2):
                 last_cross = i
                 higher = True
     # print threshold, n_cross
+    if first_cross == -1:  # no cross at all?
+        n_cross = first_cross = last_cross = 0
     return n_cross, first_cross, last_cross
 
 
@@ -72,7 +74,11 @@ def average_tci(samples, n_samples, sampling_rate, threshold_ratio=0.2):
         n, t2, t3 = results[i]
         t1 = results[i - 1][1]   # last cross of the previous 1-s segment
         t4 = results[i + 1][2]  # first cross of the next 1-s segment
-        tci = float(1000) / (n - 1 + t2/(t1 + t2) + t3/(t3 + t4))
+        if n == 0:
+            tci = 1000
+        else:
+            divider = (n - 1 + float(t2)/(t1 + t2) + float(t3)/(t3 + t4))
+            tci = float(1000) / divider
         tcis.append(tci)
 
     return np.mean(tcis) if tcis else 0.0
@@ -186,16 +192,19 @@ def mean_absolute_value(samples, sampling_rate, window_duration=2.0):
 
 # Bandpass filter:
 # http://scipy.github.io/old-wiki/pages/Cookbook/ButterworthBandpass
-def butter_bandpass(lowcut, highcut, fs, order=5):
+def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
     nyq = 0.5 * fs
     low = lowcut / nyq
     high = highcut / nyq
     b, a = butter(order, [low, high], btype='band')
-    return b, a
+    y = lfilter(b, a, data)
+    return y
 
 
-def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
-    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
+def butter_lowpass_filter(data, highcut, fs, order=5):
+    nyq = 0.5 * fs
+    high = highcut / nyq
+    b, a = butter(order, high, btype='low')
     y = lfilter(b, a, data)
     return y
 
@@ -332,8 +341,8 @@ def extract_features(samples, sampling_rate, plotting=False):
         ax[3].set_title("moving average")
         ax[3].plot(samples)
 
-    # band pass filter
-    samples = butter_bandpass_filter(samples, 1, 30, sampling_rate)
+    # low pass filter
+    samples = butter_lowpass_filter(samples, 30, sampling_rate)
     if plotting:
         ax[4].set_title("band pass filter")
         ax[4].plot(samples)
