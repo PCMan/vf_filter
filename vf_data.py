@@ -131,12 +131,19 @@ class Record:
                     code = ann.code
                     rhythm_type = ann.rhythm_type
                     if in_vf_episode:  # current rhythm is Vf
-                        if code == "]" or not rhythm_type.startswith("(V"):  # end of Vf found
+                        if code == "]":  # end of Vf found
+                            in_vf_episode = False
+                        elif code == "+" and not rhythm_type.startswith("(V"):  # end of Vf found
                             in_vf_episode = False
                     else:  # current rhythm is not Vf
-                        if code == "[" or rhythm_type.startswith("(V"):  # begin of Vf found
+                        if code == "[":  # begin of Vf found
                             segment.has_vf = in_vf_episode = True
-                    if code == "|":  # isolated artifact
+                        elif code == "+" and rhythm_type.startswith("(V"):  # begin of Vf found
+                            segment.has_vf = in_vf_episode = True
+
+                    if code == "!":  # ventricular flutter wave (this annotation is used by mitdb for V flutter beats)
+                        segment.has_vf = True
+                    elif code == "|":  # isolated artifact
                         segment.has_artifact = True
                     elif code == "~":  # change in quality
                         if ann.sub_type != 0:  # has noise or unreadable
