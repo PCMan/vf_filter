@@ -37,8 +37,8 @@ def main():
                     break
                 if show:
                     print "error:", segment.record, segment.sampling_rate, segment.begin_time, segment.has_vf
-                    plt.plot(segment.signals)
-                    plt.show()
+                    # plt.plot(segment.signals)
+                    # plt.show()
                     features = vf_features.extract_features(segment.signals, segment.sampling_rate, plotting=True)
                     print features
     except Exception:

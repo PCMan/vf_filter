@@ -38,7 +38,7 @@ def threshold_crossing_count(samples, threshold_ratio=0.2):
 
 # average threshold crossing count
 def average_tcsc(samples, n_samples, sampling_rate, window_duration, threshold_ratio=0.2):
-    window_size = window_duration * sampling_rate
+    window_size = int(window_duration * sampling_rate)
     window_begin = 0
     window_end = window_size
     tcsc = []
@@ -54,7 +54,7 @@ def average_tcsc(samples, n_samples, sampling_rate, window_duration, threshold_r
 
 # average threshold crossing interval
 def average_tci(samples, n_samples, sampling_rate, threshold_ratio=0.2):
-    window_size = sampling_rate  # calculate 1 TCI value per second
+    window_size = int(sampling_rate)  # calculate 1 TCI value per second
     window_begin = 0
     window_end = window_size
     results = []
