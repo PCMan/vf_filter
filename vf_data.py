@@ -140,7 +140,7 @@ class Record:
                             segment.has_vf = in_vf_episode = True
                         elif code == "+" and rhythm_type.startswith("(V"):  # begin of Vf found
                             segment.has_vf = in_vf_episode = True
-                            
+
                     if code == "+":  # change of rhythm
                         if rhythm_type.startswith("(NOISE"):  # the following signals are noise
                             segment.has_artifact = in_artifacts = True

@@ -11,7 +11,7 @@ from vf_data import load_data
 import multiprocessing as mp
 
 
-N_JOBS = int(mp.cpu_count() / 2) if mp.cpu_count() > 1 else 1
+N_JOBS = (mp.cpu_count() - 1) if mp.cpu_count() > 1 else 1
 N_CV_FOLDS = 10
 
 
