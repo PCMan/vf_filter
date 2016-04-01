@@ -140,6 +140,12 @@ class Record:
                             segment.has_vf = in_vf_episode = True
                         elif code == "+" and rhythm_type.startswith("(V"):  # begin of Vf found
                             segment.has_vf = in_vf_episode = True
+                            
+                    if code == "+":  # change of rhythm
+                        if rhythm_type.startswith("(NOISE"):  # the following signals are noise
+                            segment.has_artifact = in_artifacts = True
+                        else:  # change to some kind of rhythm other than noise
+                            in_artifacts = False
 
                     if code == "!":  # ventricular flutter wave (this annotation is used by mitdb for V flutter beats)
                         segment.has_vf = True
