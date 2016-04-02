@@ -22,7 +22,7 @@ def balanced_error_rate(y_true, y_predict):
     fn = np.sum(np.logical_and(pred_negative, incorrect))
     n_positive = np.sum(y_true)
     n_negative = len(y_true) - n_positive
-    return  0.5 * (fn / n_positive + fp / n_negative)
+    return 0.5 * (float(fn) / n_positive + float(fp) / n_negative)
 
 
 def classification_report(y_true, y_predict, x_test_info=None):

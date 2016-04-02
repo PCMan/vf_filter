@@ -124,6 +124,9 @@ class Record:
 
             segment.has_vf = in_vf_episode  # label of the segment
             segment.has_artifact = in_artifacts
+            vf_begin_time = 0
+            vf_end_time = 0
+            vf_duration = 0
             # handle annotations belonging to this segment
             while i_ann < n_annotations:
                 ann = annotations[i_ann]
@@ -133,13 +136,19 @@ class Record:
                     if in_vf_episode:  # current rhythm is Vf
                         if code == "]":  # end of Vf found
                             in_vf_episode = False
+                            vf_end_time = ann.time
+                            vf_duration += (vf_end_time - vf_begin_time)
                         elif code == "+" and not rhythm_type.startswith("(V"):  # end of Vf found
                             in_vf_episode = False
+                            vf_end_time = ann.time
+                            vf_duration += (vf_end_time - vf_begin_time)
                     else:  # current rhythm is not Vf
                         if code == "[":  # begin of Vf found
                             segment.has_vf = in_vf_episode = True
+                            vf_begin_time = ann.time
                         elif code == "+" and rhythm_type.startswith("(V"):  # begin of Vf found
                             segment.has_vf = in_vf_episode = True
+                            vf_begin_time = ann.time
 
                     if code == "+":  # change of rhythm
                         if rhythm_type.startswith("(NOISE"):  # the following signals are noise
@@ -149,6 +158,7 @@ class Record:
 
                     if code == "!":  # ventricular flutter wave (this annotation is used by mitdb for V flutter beats)
                         segment.has_vf = True
+                        vf_duration += self.sampling_rate  # add 1 second to vf_duration calculation
                     elif code == "|":  # isolated artifact
                         segment.has_artifact = True
                     elif code == "~":  # change in quality
@@ -156,6 +166,11 @@ class Record:
                             segment.has_artifact = in_artifacts = True
                         else:
                             in_artifacts = False
+
+                    # if total Vf duration in this segment is less than 1 second, label it as non-Vf
+                    if segment.has_vf and vf_duration < self.sampling_rate:
+                        segment.has_vf = False
+
                     i_ann += 1
                 else:
                     break

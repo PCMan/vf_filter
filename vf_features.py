@@ -345,7 +345,7 @@ def extract_features(samples, sampling_rate, plotting=False):
     # samples = butter_lowpass_filter(samples, 30, sampling_rate)
 
     # band pass filter
-    samples = butter_bandpass_filter(samples, 1, 30, sampling_rate)
+    samples = butter_bandpass_filter(samples, 0.5, 30, sampling_rate)
     if plotting:
         ax[4].set_title("band pass filter")
         ax[4].plot(samples)

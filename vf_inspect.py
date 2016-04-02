@@ -8,17 +8,28 @@ import sys
 
 def main():
     # load errors
-    error_log = "gb_errors.txt"
-    errors = []
-    with open(error_log, "r") as f:
-        for line in f:
-            errors.append(int(line.strip()))
+    error_logs = (
+        "gb_errors.txt",
+        "log_reg_errors.txt",
+        "rf_errors.txt",
+        "svc_errors.txt"
+    )
+
+    all_errors = {}
+    for error_log in error_logs:
+        with open(error_log, "r") as f:
+            for line in f:
+                error_idx = (int(line.strip()))
+                all_errors[error_idx] = all_errors.get(error_idx, 0) + 1
+
+    common_errors = sorted([idx for idx in all_errors if all_errors[idx] == len(error_logs)])
+    print "# of common errors in all classifiers:", len(common_errors)
 
     segments_cache_name = "all_segments.dat"
     # load cached segments if they exist
     try:
         i_err = 0
-        error_idx = errors[0]
+        error_idx = common_errors[0]
         i_seg = 0
         with open(segments_cache_name, "rb") as cache_file:
             while True:
@@ -31,7 +42,7 @@ def main():
                                 show = True
                             # get next error
                             i_err += 1
-                            error_idx = errors[i_err]
+                            error_idx = common_errors[i_err]
                         i_seg += 1
                 else:
                     break
@@ -44,5 +55,7 @@ def main():
     except Exception:
         print sys.exc_info()
         pass
+
+
 if __name__ == '__main__':
     main()
