@@ -125,7 +125,6 @@ class Record:
             segment.has_vf = in_vf_episode  # label of the segment
             segment.has_artifact = in_artifacts
             vf_begin_time = 0
-            vf_end_time = 0
             vf_duration = 0
             # handle annotations belonging to this segment
             while i_ann < n_annotations:
@@ -167,8 +166,8 @@ class Record:
                         else:
                             in_artifacts = False
 
-                    # if total Vf duration in this segment is less than 1 second, label it as non-Vf
-                    if segment.has_vf and vf_duration < self.sampling_rate:
+                    # if total Vf duration in this segment is less than 3 second, label it as non-Vf
+                    if segment.has_vf and vf_duration < self.sampling_rate * 1:
                         segment.has_vf = False
 
                     i_ann += 1

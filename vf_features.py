@@ -3,7 +3,7 @@
 
 import numpy as np
 from scipy.signal import butter, lfilter
-import sampen  # calculate sample entropy
+# import sampen  # calculate sample entropy
 import pyeeg
 import matplotlib.pyplot as plt
 
@@ -51,6 +51,7 @@ def average_tcsc(samples, n_samples, sampling_rate, window_duration, threshold_r
         window_begin += sampling_rate
         window_end += sampling_rate
     # calculate average of all windows
+    # print "  TCSC:", tcsc
     return np.mean(tcsc) if tcsc else 0.0
 
 
@@ -80,7 +81,7 @@ def average_tci(samples, n_samples, sampling_rate, threshold_ratio=0.2):
             divider = (n - 1 + float(t2)/(t1 + t2) + float(t3)/(t3 + t4))
             tci = float(1000) / divider
         tcis.append(tci)
-
+    # print "  TCIs:", tcis
     return np.mean(tcis) if tcis else 0.0
 
 
