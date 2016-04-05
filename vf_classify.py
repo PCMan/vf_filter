@@ -56,6 +56,10 @@ def main():
 
     # load features
     x_data, y_data, x_info = load_data(N_JOBS)
+
+    # feature selection
+    # x_data = x_data[:, (0, 1, 4, 5, 6)]
+
     print "Summary:\n", "# of segments:", len(x_data), "# of VT/Vf:", np.sum(y_data), len(x_info)
     # normalize the features
     preprocessing.normalize(x_data)
@@ -69,6 +73,7 @@ def main():
 
     # BER-based scoring function
     cv_scorer = metrics.make_scorer(balanced_error_rate, greater_is_better=False)
+    # cv_scorer = "f1"
 
     # Logistic regression
     estimator = linear_model.LogisticRegressionCV(scoring=cv_scorer)

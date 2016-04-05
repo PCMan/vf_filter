@@ -2,7 +2,8 @@
 import numpy as np
 from sklearn import preprocessing
 from sklearn import linear_model
-# from sklearn.feature_selection import SelectFromModel
+from sklearn import ensemble
+from sklearn.feature_selection import SelectFromModel
 from vf_data import load_data
 import multiprocessing as mp
 
@@ -23,8 +24,17 @@ def main():
     estimator.fit(x_data, y_data)
 
     feature_names = ("TCSC", "TCI", "STE", "MEA", "VF", "SPEC", "LZ")
-    print "feature scores:"
+
+    print "feature scores (stability selection):"
     for name, score in zip(feature_names, estimator.scores_):
+        print name, ":", score
+
+    print ""
+
+    estimator = ensemble.RandomForestClassifier()
+    estimator.fit(x_data, y_data)
+    print "feature scores (tree selection):"
+    for name, score in zip(feature_names, estimator.feature_importances_):
         print name, ":", score
 
 

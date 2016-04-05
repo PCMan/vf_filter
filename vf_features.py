@@ -2,7 +2,7 @@
 # Felipe AA et al. 2014. Detection of Life-Threatening Arrhythmias Using Feature Selection and Support Vector Machines
 
 import numpy as np
-from scipy.signal import butter, lfilter
+from scipy.signal import butter, lfilter, hamming
 # import sampen  # calculate sample entropy
 import pyeeg
 import matplotlib.pyplot as plt
@@ -39,7 +39,7 @@ def threshold_crossing_count(samples, threshold_ratio=0.2):
 
 
 # average threshold crossing count
-def average_tcsc(samples, n_samples, sampling_rate, window_duration, threshold_ratio=0.2):
+def threshold_crossing_sample_counts(samples, n_samples, sampling_rate, window_duration, threshold_ratio=0.2):
     window_size = int(window_duration * sampling_rate)
     window_begin = 0
     window_end = window_size
@@ -52,11 +52,11 @@ def average_tcsc(samples, n_samples, sampling_rate, window_duration, threshold_r
         window_end += sampling_rate
     # calculate average of all windows
     # print "  TCSC:", tcsc
-    return np.mean(tcsc) if tcsc else 0.0
+    return tcsc
 
 
 # average threshold crossing interval
-def average_tci(samples, n_samples, sampling_rate, threshold_ratio=0.2):
+def threshold_crossing_intervals(samples, n_samples, sampling_rate, threshold_ratio=0.2):
     window_size = int(sampling_rate)  # calculate 1 TCI value per second
     window_begin = 0
     window_end = window_size
@@ -82,7 +82,7 @@ def average_tci(samples, n_samples, sampling_rate, threshold_ratio=0.2):
             tci = float(1000) / divider
         tcis.append(tci)
     # print "  TCIs:", tcis
-    return np.mean(tcis) if tcis else 0.0
+    return tcis
 
 
 def standard_exponential(samples, sampling_rate, time_constant=3):
@@ -243,7 +243,8 @@ def vf_leak(samples, peak_freq):
     for i in range(half_cycle, len(samples)):
         vf_leak_numerator += np.abs(samples[i] + samples[i - half_cycle])
         vf_leak_denominator += np.abs(samples[i]) + np.abs(samples[i - half_cycle])
-    return vf_leak_numerator / vf_leak_denominator
+    vf_leak = vf_leak_numerator / vf_leak_denominator
+    return vf_leak
 
 
 # the original sample entropy algorithm is too slow.
@@ -360,12 +361,14 @@ def extract_features(samples, sampling_rate, plotting=False):
     # get all crossing points, use 20% of maximum as threshold
     # calculate average TCSC using a 3-s window
     # using 3-s moving window
-    tcsc = average_tcsc(samples, len(samples), sampling_rate=sampling_rate, window_duration=3, threshold_ratio=0.2)
-    features.append(tcsc)
+    tcsc = threshold_crossing_sample_counts(samples, len(samples), sampling_rate=sampling_rate, window_duration=3, threshold_ratio=0.1)
+    features.append(np.mean(tcsc))
+    # features.append(np.std(tcsc))
 
     # average TCI for every 1-second segments
-    tci = average_tci(samples, len(samples), sampling_rate=sampling_rate, threshold_ratio=0.2)
-    features.append(tci)
+    tcis = threshold_crossing_intervals(samples, len(samples), sampling_rate=sampling_rate, threshold_ratio=0.1)
+    features.append(np.mean(tcis))
+    # features.append(np.std(tcis))
 
     # Standard exponential (STE)
     ste = standard_exponential(samples, sampling_rate)
@@ -378,8 +381,9 @@ def extract_features(samples, sampling_rate, plotting=False):
     # spectral parameters (characteristics of power spectrum)
     # -------------------------------------------------
     # perform discrete Fourier transform
+    n_samples = len(samples)
     fft = np.fft.fft(samples)
-    fft_freq = np.fft.fftfreq(len(samples))
+    fft_freq = np.fft.fftfreq(n_samples)
 
     peak_freq_idx, peak_freq = find_peak_freq(fft, fft_freq)
 
@@ -388,13 +392,19 @@ def extract_features(samples, sampling_rate, plotting=False):
 
     # calculate other spectral parameters
     # first spectral moment M = 1/peak_freq * (sum(ai * wi)/sum(wi)) for i = 1 to jmax
+    # The original paper multiply a hamming window here.
+    fft = np.fft.fft(samples * hamming(n_samples))
+
     # FIXME: what if peak freq = 0?
     if peak_freq == 0:  # is this correct?
         peak_freq = fft_freq[1]
 
     jmax = min(20 * peak_freq_idx, 100)
     # approximate the amplitude by real + imaginary parts
-    amplitudes = [np.abs(fft[i].real) + np.abs(fft[i].imag) for i in range(0, jmax + 1)]
+    amplitudes = np.array([np.abs(fft[i].real) + np.abs(fft[i].imag) for i in range(0, jmax + 1)])
+    max_amplitude = np.max(amplitudes)
+    # amplitudes whose value is less than 5% of max are set to zero.
+    amplitudes[amplitudes < (0.05 * max_amplitude)] = 0
     spectral_moment = (1 / peak_freq) * np.sum([amplitudes[i] * fft_freq[i] for i in range(0, jmax + 1)]) / np.sum(amplitudes)
     features.append(spectral_moment)
 
