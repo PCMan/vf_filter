@@ -1,4 +1,5 @@
 #!/usr/bin/env python2
+# coding: utf-8
 import vf_features
 import cPickle as pickle  # python 2 only
 import numpy as np

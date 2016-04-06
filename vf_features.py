@@ -1,3 +1,4 @@
+# coding: utf-8
 # This implements common VF related features reported in the literatures.
 # Felipe AA et al. 2014. Detection of Life-Threatening Arrhythmias Using Feature Selection and Support Vector Machines
 
@@ -228,23 +229,23 @@ def find_peak_freq(fft, fft_freq):
 
 # the VF leak algorithm
 def vf_leak(samples, peak_freq):
+    # From Computers in Cardiology 2002;29:213−216.
+    # This method separates nearly sinusoidal waveforms from the rest.
+    # VF is nearly sinusoidal. The idea is to move such signal by half period
+    # trying to minimize the sum of the signal and its shifted copy.
+
     # calculate VF leaks
     # find the central/peak frequency
     # http://cinc.mit.edu/archives/2002/pdf/213.pdf
-    # T = (1/f) * sample_rate
     if peak_freq != 0:
-        cycle = (1 / peak_freq)  # in terms of samples
+        cycle = (1.0 / peak_freq)  # in terms of samples
     else:
-        cycle = len(samples)  # FIXME: should we use infinity here?
-
-    vf_leak_numerator = 0.0
-    vf_leak_denominator = 0.0
+        cycle = len(samples)
     half_cycle = int(cycle/2)
-    for i in range(half_cycle, len(samples)):
-        vf_leak_numerator += np.abs(samples[i] + samples[i - half_cycle])
-        vf_leak_denominator += np.abs(samples[i]) + np.abs(samples[i - half_cycle])
-    vf_leak = vf_leak_numerator / vf_leak_denominator
-    return vf_leak
+
+    original = samples[half_cycle:]
+    shifted = samples[:-half_cycle]
+    return np.sum(np.abs(original + shifted)) / np.sum(np.abs(original) + np.abs(shifted))
 
 
 # the original sample entropy algorithm is too slow.

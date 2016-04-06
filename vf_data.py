@@ -1,4 +1,5 @@
 #!/usr/bin/env python2
+# coding: utf-8
 from ctypes import *
 import numpy as np
 import scipy.signal
