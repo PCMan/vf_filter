@@ -75,6 +75,7 @@ def main():
     # BER-based scoring function
     cv_scorer = metrics.make_scorer(balanced_error_rate, greater_is_better=False)
     # cv_scorer = "f1"
+    # cv_scorer = "accuracy"
 
     # Logistic regression
     estimator = linear_model.LogisticRegressionCV(scoring=cv_scorer)
@@ -84,13 +85,11 @@ def main():
     print "Logistic regression: precision:\n", classification_report(y_test, y_predict), estimator.scores_, "\n"
     output_errors(y_test, y_predict, x_indicies=x_test_idx, filename="log_reg_errors.txt")
 
-
     # Random forest
     estimator = ensemble.RandomForestClassifier()
-    grid = grid_search.RandomizedSearchCV(estimator, {
+    grid = grid_search.GridSearchCV(estimator, {
                                         "n_estimators": range(10, 110, 10)
                                     },
-                                    n_iter=10,
                                     scoring=cv_scorer,
                                     n_jobs=N_JOBS, cv=N_CV_FOLDS, verbose=1)
     grid.fit(x_train, y_train)
@@ -98,12 +97,11 @@ def main():
     print "RandomForest:\n", classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n"
     output_errors(y_test, y_predict, x_indicies=x_test_idx, filename="rf_errors.txt")
 
-
     # SVC with RBF kernel
-    estimator = svm.SVC(shrinking=False, cache_size=1024, verbose=False)
+    estimator = svm.SVC(shrinking=False, cache_size=2048, verbose=False)
     grid = grid_search.RandomizedSearchCV(estimator, {
-                                        "C": np.logspace(-2, 2, 5),
-                                        "gamma": np.logspace(-2, 2, 5)
+                                        "C": np.logspace(-2, 1, 4),
+                                        "gamma": np.logspace(-2, 1, 4)
                                     },
                                     scoring=cv_scorer,
                                     n_jobs=N_JOBS, cv=N_CV_FOLDS, verbose=1)
@@ -112,13 +110,11 @@ def main():
     print "SVC:\n", classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n"
     output_errors(y_test, y_predict, x_indicies=x_test_idx, filename="svc_errors.txt")
 
-
-    '''
     # AdaBoost decision tree
     estimator = ensemble.AdaBoostClassifier()
     grid = grid_search.RandomizedSearchCV(estimator, {
-                                        "n_estimators": range(10, 110, 10),
-                                        "learning_rate": np.logspace(-2, 1, 4)
+                                        "n_estimators": range(60, 210, 20),
+                                        "learning_rate": np.logspace(-1, 1, 3)
                                     },
                                     n_iter=20,
                                     scoring=cv_scorer,
@@ -126,16 +122,13 @@ def main():
     grid.fit(x_train, y_train)
     y_predict = grid.predict(x_test)
     print "AdaBoost:\n", classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n"
-    '''
 
     # Gradient boosting
-    estimator = ensemble.GradientBoostingClassifier()
-    grid = grid_search.RandomizedSearchCV(estimator, {
-                                        "learning_rate": np.logspace(-2, 1, 4),
-                                        "n_estimators": range(50, 210, 10),
-                                        "max_depth": range(3, 10)
+    estimator = ensemble.GradientBoostingClassifier(learning_rate=0.1)
+    grid = grid_search.GridSearchCV(estimator, {
+                                        "n_estimators": range(150, 250, 10),
+                                        "max_depth": range(3, 8)
                                     },
-                                    n_iter=20,
                                     scoring=cv_scorer,
                                     n_jobs=N_JOBS, cv=N_CV_FOLDS, verbose=1)
     grid.fit(x_train, y_train)

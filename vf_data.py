@@ -167,7 +167,7 @@ class Record:
                         else:
                             in_artifacts = False
 
-                    # if total Vf duration in this segment is less than 3 second, label it as non-Vf
+                    # if total Vf duration in this segment is less than 1 second, label it as non-Vf
                     if segment.has_vf and vf_duration < self.sampling_rate * 1:
                         segment.has_vf = False
 
