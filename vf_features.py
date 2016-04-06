@@ -191,6 +191,29 @@ def mean_absolute_value(samples, sampling_rate, window_duration=2.0):
         window_end += sampling_rate
     return np.mean(mavs)
 
+# PSR feature:
+# 2007. Anton Amann et al. Detecting Ventricular Fibrillation by Time-Delay Methods
+# Plotting the time sequence on a phase space plot, and then calculate the boxes
+# visited in a 40x40 grid.
+def phase_space_reconstruction(samples, sampling_rate, delay=0.5):
+    # FIXME: this is a very naiive slow implementation.
+    # phase space plotting
+    # each data point is: x: x(t), y: x(t + T), where T = 0.5 s.
+    n_samples = len(samples)
+    n_delay = int(delay * sampling_rate)
+    data = []
+    for t in range(0, n_samples - n_delay):
+        x = samples[t]
+        y = samples[t + n_delay]
+        data.append((x, y))
+    # make a 40 x 40 grids
+    grid = np.zeros((40, 40))
+    for x, y in data:
+        grid_x = int(x / 40)
+        grid_y = int(y / 40)
+        grid[grid_x][grid_y] = 1
+    return np.sum(grid) / 1600
+
 
 # Bandpass filter:
 # http://scipy.github.io/old-wiki/pages/Cookbook/ButterworthBandpass
@@ -379,6 +402,10 @@ def extract_features(samples, sampling_rate, plotting=False):
     mea = modified_exponential(samples, sampling_rate)
     features.append(mea)
 
+    # phase space reconstruction (PSR)
+    psr = phase_space_reconstruction(samples, sampling_rate)
+    features.append(psr)
+
     # spectral parameters (characteristics of power spectrum)
     # -------------------------------------------------
     # perform discrete Fourier transform
@@ -402,9 +429,8 @@ def extract_features(samples, sampling_rate, plotting=False):
         peak_freq = fft_freq[1]
 
     jmax = min(20 * peak_freq_idx, 100)
-    # approximate the amplitude by real + imaginary parts
-    # amplitudes = np.array([np.abs(fft[i].real) + np.abs(fft[i].imag) for i in range(0, jmax + 1)])
-    amplitudes = np.array([np.abs(fft[i]) for i in range(0, jmax + 1)])
+    # The original paper approximate the amplitude by real + imaginary parts instead.
+    amplitudes = np.abs(fft[0:jmax + 1])
     max_amplitude = np.max(amplitudes)
     # amplitudes whose value is less than 5% of max are set to zero.
     amplitudes[amplitudes < (0.05 * max_amplitude)] = 0
