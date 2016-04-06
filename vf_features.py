@@ -197,22 +197,22 @@ def mean_absolute_value(samples, sampling_rate, window_duration=2.0):
 # Plotting the time sequence on a phase space plot, and then calculate the boxes
 # visited in a 40x40 grid.
 def phase_space_reconstruction(samples, sampling_rate, delay=0.5):
-    # FIXME: this is a very naiive slow implementation.
     # phase space plotting
-    # each data point is: x: x(t), y: x(t + T), where T = 0.5 s.
+    # each data point is: x: x(t), y: x(t + T), where T = 0.5 s by default.
     n_samples = len(samples)
     n_delay = int(delay * sampling_rate)
-    x = samples[0:n_samples - n_delay]
-    y = samples[n_delay:n_samples]
-    data = np.stack((x, y), axis=1)
 
-    # make a 40 x 40 grids
-    grid = np.zeros((40, 40))
+    x_samples = samples[0:n_samples - n_delay]
+    y_samples = samples[n_delay:n_samples]
     offset = np.min(samples)
     axis_range = np.max(samples) - offset
-    grid_xy = ((data - offset) * 39.0 / axis_range).astype("int")
-    for pos in grid_xy:
-        grid[pos[0], pos[1]] = 1
+
+    # convert X and Y values to indices of the 40 x 40 grid
+    grid_x = ((x_samples - offset) * 39.0 / axis_range).astype("int")
+    grid_y = ((y_samples - offset) * 39.0 / axis_range).astype("int")
+
+    grid = np.zeros((40, 40))
+    grid[grid_y, grid_x] = 1
     return float(np.sum(grid)) / 1600
 
 
