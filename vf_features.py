@@ -208,11 +208,13 @@ def phase_space_reconstruction(samples, sampling_rate, delay=0.5):
         data.append((x, y))
     # make a 40 x 40 grids
     grid = np.zeros((40, 40))
+    offset = np.min(samples)
+    axis_range = np.max(samples) - offset
     for x, y in data:
-        grid_x = int(x / 40)
-        grid_y = int(y / 40)
+        grid_x = int((x - offset) * 39.0 / axis_range)
+        grid_y = int((y - offset) * 39.0 / axis_range)
         grid[grid_x][grid_y] = 1
-    return np.sum(grid) / 1600
+    return float(np.sum(grid)) / 1600
 
 
 # Bandpass filter:
