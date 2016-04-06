@@ -382,8 +382,11 @@ def extract_features(samples, sampling_rate, plotting=False):
     # spectral parameters (characteristics of power spectrum)
     # -------------------------------------------------
     # perform discrete Fourier transform
+    # apply a hamming window here for side lobe suppression.
+    # (the original VF leak paper does not seem to do this).
+    # http://www.ni.com/white-paper/4844/en/
     n_samples = len(samples)
-    fft = np.fft.fft(samples)
+    fft = np.fft.fft(samples * hamming(n_samples))
     fft_freq = np.fft.fftfreq(n_samples)
 
     peak_freq_idx, peak_freq = find_peak_freq(fft, fft_freq)
@@ -393,8 +396,6 @@ def extract_features(samples, sampling_rate, plotting=False):
 
     # calculate other spectral parameters
     # first spectral moment M = 1/peak_freq * (sum(ai * wi)/sum(wi)) for i = 1 to jmax
-    # The original paper multiply a hamming window here.
-    fft = np.fft.fft(samples * hamming(n_samples))
 
     # FIXME: what if peak freq = 0?
     if peak_freq == 0:  # is this correct?
@@ -402,7 +403,8 @@ def extract_features(samples, sampling_rate, plotting=False):
 
     jmax = min(20 * peak_freq_idx, 100)
     # approximate the amplitude by real + imaginary parts
-    amplitudes = np.array([np.abs(fft[i].real) + np.abs(fft[i].imag) for i in range(0, jmax + 1)])
+    # amplitudes = np.array([np.abs(fft[i].real) + np.abs(fft[i].imag) for i in range(0, jmax + 1)])
+    amplitudes = np.array([np.abs(fft[i]) for i in range(0, jmax + 1)])
     max_amplitude = np.max(amplitudes)
     # amplitudes whose value is less than 5% of max are set to zero.
     amplitudes[amplitudes < (0.05 * max_amplitude)] = 0
