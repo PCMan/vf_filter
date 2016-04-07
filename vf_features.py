@@ -449,8 +449,8 @@ def extract_features(samples, sampling_rate, plotting=False):
 
     # sample entropy (SpEn)
     # spen = sample_entropy(samples, 5 * sampling_rate)
-    # spen = pyeeg.samp_entropy(samples, M=2, R=0.2)
-    # features.append(spen)
+    spen = pyeeg.samp_entropy(samples, M=2, R=0.2)
+    features.append(spen)
 
     # MAV
     # mav = mean_absolute_value(samples, sampling_rate)

@@ -12,8 +12,8 @@ from vf_data import load_data
 import multiprocessing as mp
 
 
-N_JOBS = (mp.cpu_count() - 1) if mp.cpu_count() > 1 else 1
 N_CV_FOLDS = 10
+ALLOWED_FALSE_POS_RATE = 0.05  # 1 - specificity
 
 
 def balanced_error_rate(y_true, y_predict):
@@ -54,9 +54,10 @@ def output_errors(y_true, y_predict, x_indicies, filename):
 
 
 def main():
+    n_jobs = (mp.cpu_count() - 1) if mp.cpu_count() > 1 else 1
 
     # load features
-    x_data, y_data, x_info = load_data(N_JOBS)
+    x_data, y_data, x_info = load_data(n_jobs)
 
     # feature selection
     # x_data = x_data[:, (0, 1, 4, 5, 6)]
@@ -91,25 +92,49 @@ def main():
                                         "n_estimators": range(10, 110, 10)
                                     },
                                     scoring=cv_scorer,
-                                    n_jobs=N_JOBS, cv=N_CV_FOLDS, verbose=1)
+                                    n_jobs=n_jobs, cv=N_CV_FOLDS, verbose=1)
     grid.fit(x_train, y_train)
-    y_predict = grid.predict(x_test)
-    print "RandomForest:\n", classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n"
-    output_errors(y_test, y_predict, x_indicies=x_test_idx, filename="rf_errors.txt")
+    # y_predict = grid.predict(x_test)
+    # print "RandomForest:\n", classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n"
+    # output_errors(y_test, y_predict, x_indicies=x_test_idx, filename="rf_errors.txt")
+
+    # prediction with probabilities
+    y_predict_scores = grid.predict_proba(x_test)[:, 1]
+    false_pos_rate, true_pos_rate, thresholds = metrics.roc_curve(y_test, y_predict_scores)
+    # find sensitivity at 95% specificity
+    x = np.searchsorted(false_pos_rate, ALLOWED_FALSE_POS_RATE)
+    print "RF: Se when Sp is 95%", true_pos_rate[x] * 100, "%"
+    '''
+    import matplotlib.pyplot as plt
+    plt.plot(false_pos_rate, true_pos_rate)
+    plt.xlabel("1 - Specificity")
+    plt.ylabel("Sensitivity")
+    plt.show()
+    '''
 
     # SVC with RBF kernel
-    estimator = svm.SVC(shrinking=False, cache_size=2048, verbose=False)
+    estimator = svm.SVC(shrinking=False, cache_size=2048, verbose=False, probability=True)
     grid = grid_search.RandomizedSearchCV(estimator, {
                                         "C": np.logspace(-2, 1, 4),
                                         "gamma": np.logspace(-2, 1, 4)
                                     },
                                     scoring=cv_scorer,
-                                    n_jobs=N_JOBS, cv=N_CV_FOLDS, verbose=1)
+                                    n_jobs=n_jobs, cv=N_CV_FOLDS, verbose=1)
     grid.fit(x_train, y_train)
+    '''
     y_predict = grid.predict(x_test)
     print "SVC:\n", classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n"
     output_errors(y_test, y_predict, x_indicies=x_test_idx, filename="svc_errors.txt")
+    '''
 
+    # prediction with probabilities
+    y_predict_scores = grid.predict_proba(x_test)[:, 1]
+    false_pos_rate, true_pos_rate, thresholds = metrics.roc_curve(y_test, y_predict_scores)
+    x = np.searchsorted(false_pos_rate, ALLOWED_FALSE_POS_RATE)
+    print "SVC: Se when Sp is 95%", true_pos_rate[x] * 100, "%"
+
+
+    """
     # AdaBoost decision tree
     estimator = ensemble.AdaBoostClassifier()
     grid = grid_search.RandomizedSearchCV(estimator, {
@@ -118,10 +143,11 @@ def main():
                                     },
                                     n_iter=20,
                                     scoring=cv_scorer,
-                                    n_jobs=N_JOBS, cv=N_CV_FOLDS, verbose=1)
+                                    n_jobs=n_jobs, cv=N_CV_FOLDS, verbose=1)
     grid.fit(x_train, y_train)
     y_predict = grid.predict(x_test)
     print "AdaBoost:\n", classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n"
+    """
 
     # Gradient boosting
     estimator = ensemble.GradientBoostingClassifier(learning_rate=0.1)
@@ -130,14 +156,22 @@ def main():
                                         "max_depth": range(3, 8)
                                     },
                                     scoring=cv_scorer,
-                                    n_jobs=N_JOBS, cv=N_CV_FOLDS, verbose=1)
+                                    n_jobs=n_jobs, cv=N_CV_FOLDS, verbose=1)
     grid.fit(x_train, y_train)
+    '''
     y_predict = grid.predict(x_test)
     print "Gradient Boosting:\n", classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n"
     # list_classification_errors(y_test, y_predict, x_info=x_test_info)
     # debugging:
     # inspect segments with errors
     output_errors(y_test, y_predict, x_indicies=x_test_idx, filename="gb_errors.txt")
+    '''
+
+    # prediction with probabilities
+    y_predict_scores = grid.predict_proba(x_test)[:, 1]
+    false_pos_rate, true_pos_rate, thresholds = metrics.roc_curve(y_test, y_predict_scores)
+    x = np.searchsorted(false_pos_rate, ALLOWED_FALSE_POS_RATE)
+    print "GB: Se when Sp is 95%", true_pos_rate[x] * 100, "%"
 
 
 if __name__ == "__main__":

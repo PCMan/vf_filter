@@ -24,7 +24,7 @@ def main():
     estimator = linear_model.RandomizedLogisticRegression(n_resampling=500, verbose=True)
     estimator.fit(x_data, y_data)
 
-    feature_names = ("TCSC", "TCI", "STE", "MEA", "PSR", "VF", "SPEC", "LZ")
+    feature_names = ("TCSC", "TCI", "STE", "MEA", "PSR", "VF", "SPEC", "LZ", "SpEn")
 
     print "feature scores (stability selection):"
     for name, score in zip(feature_names, estimator.scores_):
