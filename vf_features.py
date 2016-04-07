@@ -39,16 +39,48 @@ def threshold_crossing_count(samples, threshold_ratio=0.2):
     return n_cross, first_cross, last_cross
 
 
+def tcsc_cosine_window(n_samples, sampling_rate):
+    quarter = int(0.25 * sampling_rate)  # 1/4 second
+    t = np.arange(0, quarter)
+    left = 0.5 * (1.0 - np.cos(4 * np.pi * t / sampling_rate))
+    t = np.arange(n_samples - quarter, n_samples)
+    right = 0.5 * (1.0 - np.cos(4 * np.pi * t / sampling_rate))
+    middle = np.ones(n_samples - quarter * 2)
+    window = np.concatenate((left, middle, right))
+    return window
+
+
 # average threshold crossing count
+# TCSC feature
+# Muhammad Abdullah Arafat et al. 2011. A simple time domain algorithm for the detection of
+# ventricular fibrillation in electrocardiogram.
 def threshold_crossing_sample_counts(samples, n_samples, sampling_rate, window_duration, threshold_ratio=0.2):
+    sampling_rate = int(sampling_rate)  # force the use of integer type for sampling rate
+    # steps:
+    # 1. multiply the samples by a cosine window
+    #  w(t) = 1/2(1-cos(4*pi*t)), if 0 <= t <= 1/4 or Ls-1/4 <= t <= Ls
+    #  w(t) = 1, otherwise
+    # 2. normalize by abs max
+    # 3. convert to binary string by comparing abs(x) with threshold V0. (1 if x >= V0); (V0 = 0.2 by default)
+    # 4. calculate the samples that cross V0 (number of 1s in the binary sequence)
+    #    N = <# of samples that cross V0> / <# of samples> * 100
+    # 5. average all Ls-2 N values
     window_size = int(window_duration * sampling_rate)
     window_begin = 0
     window_end = window_size
     tcsc = []
     while window_end <= n_samples:
+        # moving window
         window = samples[window_begin:window_end]
-        n_cross, first_cross, last_cross = threshold_crossing_count(window, threshold_ratio)
-        tcsc.append(n_cross)
+        # multiply by a cosine window
+        window *= tcsc_cosine_window(window_size, sampling_rate)
+        # use absolute values for analysis
+        window = np.abs(window)
+        # normalize by max
+        window /= np.max(window)
+        # convert to binary string
+        n = np.sum(window > threshold_ratio) * 100.0 / window_size
+        tcsc.append(n)
         window_begin += sampling_rate
         window_end += sampling_rate
     # calculate average of all windows
@@ -58,6 +90,7 @@ def threshold_crossing_sample_counts(samples, n_samples, sampling_rate, window_d
 
 # average threshold crossing interval
 def threshold_crossing_intervals(samples, n_samples, sampling_rate, threshold_ratio=0.2):
+    sampling_rate = int(sampling_rate)  # force the use of integer type for sampling rate
     window_size = int(sampling_rate)  # calculate 1 TCI value per second
     window_begin = 0
     window_end = window_size
