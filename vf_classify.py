@@ -77,6 +77,7 @@ def main():
     cv_scorer = metrics.make_scorer(balanced_error_rate, greater_is_better=False)
     # cv_scorer = "f1"
     # cv_scorer = "accuracy"
+    # cv_scorer = metrics.make_scorer(metrics.fbeta_score, beta=10.0)
 
     # Logistic regression
     estimator = linear_model.LogisticRegressionCV(scoring=cv_scorer)

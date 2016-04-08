@@ -4,7 +4,11 @@ from ctypes import *
 import numpy as np
 import scipy.signal
 import os
-import wfdb
+try:
+    import wfdb
+except Exception:
+    print "Warning: unable to import wfdb library."
+
 from vf_features import extract_features
 # import pickle
 import cPickle as pickle  # python 2 only
