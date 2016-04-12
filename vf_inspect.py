@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+import pyximport; pyximport.install()
 import vf_features
 import pickle
 import numpy as np

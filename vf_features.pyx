@@ -2,7 +2,7 @@
 # coding: utf-8
 # This implements common VF related features reported in the literatures.
 # Felipe AA et al. 2014. Detection of Life-Threatening Arrhythmias Using Feature Selection and Support Vector Machines
-
+import pyximport; pyximport.install()
 import numpy as np
 from scipy.signal import butter, lfilter, hamming
 # import sampen  # calculate sample entropy
@@ -42,6 +42,7 @@ def threshold_crossing_count(samples, threshold_ratio=0.2):
 
 def tcsc_cosine_window(duration, sampling_rate):
     sampling_rate = int(sampling_rate)
+    window_size = int(duration * sampling_rate)
 
     t = np.linspace(0, 0.25, num=0.25 * sampling_rate)
     left = 0.5 * (1.0 - np.cos(4 * np.pi * t))
@@ -49,7 +50,7 @@ def tcsc_cosine_window(duration, sampling_rate):
     t = np.linspace(duration - 0.25, duration, num=0.25 * sampling_rate)
     right = 0.5 * (1.0 - np.cos(4 * np.pi * t))
 
-    middle = np.ones((duration - 0.5) * sampling_rate)
+    middle = np.ones(window_size - len(left) - len(right))
     return np.concatenate((left, middle, right))
 
 
@@ -76,7 +77,8 @@ def threshold_crossing_sample_counts(samples, n_samples, sampling_rate, window_d
         # moving window
         window = samples[window_begin:window_end]
         # multiply by a cosine window
-        window *= tcsc_cosine_window(window_duration, sampling_rate)
+        cos_window = tcsc_cosine_window(window_duration, sampling_rate)
+        window *= cos_window
         # use absolute values for analysis
         window = np.abs(window)
         # normalize by max

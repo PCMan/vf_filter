@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
+import pyximport; pyximport.install()
 import os
 import pickle
 import vf_data
+import vf_features
 
 
 def main():
@@ -20,6 +22,8 @@ def main():
     segments = record.get_segments()
     for segment in segments:
         print(segment.begin_time, segment.has_vf)
+        if segment.begin_time == 156000:
+            vf_features.extract_features(segment.signals, segment.sampling_rate)
 
     return 0
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import pyximport; pyximport.install()
 from ctypes import *
 import numpy as np
 import scipy.signal

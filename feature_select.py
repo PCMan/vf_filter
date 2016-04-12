@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import pyximport; pyximport.install()
 import numpy as np
 from sklearn import preprocessing
 from sklearn import linear_model
