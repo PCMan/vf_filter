@@ -39,15 +39,17 @@ def threshold_crossing_count(samples, threshold_ratio=0.2):
     return n_cross, first_cross, last_cross
 
 
-def tcsc_cosine_window(n_samples, sampling_rate):
-    quarter = int(0.25 * sampling_rate)  # 1/4 second
-    t = np.arange(0, quarter)
-    left = 0.5 * (1.0 - np.cos(4 * np.pi * t / sampling_rate))
-    t = np.arange(n_samples - quarter, n_samples)
-    right = 0.5 * (1.0 - np.cos(4 * np.pi * t / sampling_rate))
-    middle = np.ones(n_samples - quarter * 2)
-    window = np.concatenate((left, middle, right))
-    return window
+def tcsc_cosine_window(duration, sampling_rate):
+    sampling_rate = int(sampling_rate)
+
+    t = np.linspace(0, 0.25, num=0.25 * sampling_rate)
+    left = 0.5 * (1.0 - np.cos(4 * np.pi * t))
+
+    t = np.linspace(duration - 0.25, duration, num=0.25 * sampling_rate)
+    right = 0.5 * (1.0 - np.cos(4 * np.pi * t))
+
+    middle = np.ones((duration - 0.5) * sampling_rate)
+    return np.concatenate((left, middle, right))
 
 
 # average threshold crossing count
@@ -73,7 +75,7 @@ def threshold_crossing_sample_counts(samples, n_samples, sampling_rate, window_d
         # moving window
         window = samples[window_begin:window_end]
         # multiply by a cosine window
-        window *= tcsc_cosine_window(window_size, sampling_rate)
+        window *= tcsc_cosine_window(window_duration, sampling_rate)
         # use absolute values for analysis
         window = np.abs(window)
         # normalize by max
