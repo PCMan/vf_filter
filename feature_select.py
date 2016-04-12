@@ -1,5 +1,4 @@
-#!/usr/bin/env python2
-# coding: utf-8
+#!/usr/bin/env python3
 import numpy as np
 from sklearn import preprocessing
 from sklearn import linear_model

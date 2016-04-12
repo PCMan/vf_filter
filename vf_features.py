@@ -283,7 +283,8 @@ def moving_average(samples, order=5):
 
 # find the peak frequency and its index in the FFT spectrum
 def find_peak_freq(fft, fft_freq):
-    peak_freq_idx = fft[:len(fft)/2].argmax()
+    n_freq = len(fft) // 2
+    peak_freq_idx = fft[:n_freq].argmax()
     return peak_freq_idx, fft_freq[peak_freq_idx]
 
 

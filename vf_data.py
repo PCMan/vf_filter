@@ -132,12 +132,16 @@ class Record:
                             in_artifacts = False
 
                     # if total Vf duration in this segment is less than 1 second, label it as non-Vf
-                    if segment.has_vf and vf_duration < self.sampling_rate * 1:
-                        segment.has_vf = False
+                    # if segment.has_vf and vf_duration < self.sampling_rate * 1:
+                    #     segment.has_vf = False
 
                     i_ann += 1
                 else:
                     break
+
+            # label of the segment as Vf only if Vf still persists at the end of the segment
+            segment.has_vf = in_vf_episode
+
             segments.append(segment)
         return segments
 
