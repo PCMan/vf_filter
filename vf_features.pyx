@@ -58,7 +58,7 @@ def tcsc_cosine_window(float duration, int sampling_rate):
 # TCSC feature
 # Muhammad Abdullah Arafat et al. 2011. A simple time domain algorithm for the detection of
 # ventricular fibrillation in electrocardiogram.
-def threshold_crossing_sample_counts(samples, n_samples, sampling_rate, window_duration, threshold_ratio=0.2):
+def threshold_crossing_sample_counts(samples, int n_samples, int sampling_rate, float window_duration, float threshold_ratio=0.2):
     sampling_rate = int(sampling_rate)  # force the use of integer type for sampling rate
     # steps:
     # 1. multiply the samples by a cosine window
