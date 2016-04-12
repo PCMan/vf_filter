@@ -9,7 +9,9 @@ import multiprocessing as mp
 
 
 DEFAULT_SAMPLING_RATE = 360.0
-dataset_dir = os.path.join(os.path.dirname(__file__), "datasets")
+# dataset_dir = os.path.join(os.path.dirname(__file__), "datasets")
+dataset_dir = "datasets"
+
 
 # get name of records from a database
 def get_records(db_name):
