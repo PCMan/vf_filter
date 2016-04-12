@@ -1,7 +1,7 @@
-#!/usr/bin/env python2
-# coding: utf-8
+#!/usr/bin/env python3
+
 import vf_features
-import pickle as pickle  # python 2 only
+import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 import sys
