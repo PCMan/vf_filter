@@ -40,7 +40,7 @@ def threshold_crossing_count(samples, threshold_ratio=0.2):
     return n_cross, first_cross, last_cross
 
 
-def tcsc_cosine_window(duration, sampling_rate):
+def tcsc_cosine_window(float duration, int sampling_rate):
     sampling_rate = int(sampling_rate)
     window_size = int(duration * sampling_rate)
 
@@ -94,7 +94,7 @@ def threshold_crossing_sample_counts(samples, n_samples, sampling_rate, window_d
 
 
 # average threshold crossing interval
-def threshold_crossing_intervals(samples, n_samples, sampling_rate, threshold_ratio=0.2):
+def threshold_crossing_intervals(samples, int n_samples, int sampling_rate, float threshold_ratio=0.2):
     sampling_rate = int(sampling_rate)  # force the use of integer type for sampling rate
     window_size = int(sampling_rate)  # calculate 1 TCI value per second
     window_begin = 0
@@ -210,7 +210,7 @@ def modified_exponential(samples, sampling_rate, peak_threshold=0.2, time_consta
 # Emran M Abu Anas et al. 2010. Sequential algorithm for life threatening cardiac pathologies detection based on
 # mean signal strength and EMD functions.
 # http://biomedical-engineering-online.biomedcentral.com/articles/10.1186/1475-925X-9-43
-def mean_absolute_value(samples, sampling_rate, window_duration=2.0):
+def mean_absolute_value(samples, int sampling_rate, float window_duration=2.0):
     # pre-processing: mean subtraction
     # FIXME: the samples we got here already received normalization, which is different from that in the original paper
     n_samples = len(samples)
@@ -234,7 +234,7 @@ def mean_absolute_value(samples, sampling_rate, window_duration=2.0):
 # 2007. Anton Amann et al. Detecting Ventricular Fibrillation by Time-Delay Methods
 # Plotting the time sequence on a phase space plot, and then calculate the boxes
 # visited in a 40x40 grid.
-def phase_space_reconstruction(samples, sampling_rate, delay=0.5):
+def phase_space_reconstruction(samples, int sampling_rate, float delay=0.5):
     # phase space plotting
     # each data point is: x: x(t), y: x(t + T), where T = 0.5 s by default.
     n_samples = len(samples)
@@ -273,7 +273,7 @@ def butter_lowpass_filter(data, highcut, fs, order=5):
     return y
 
 
-def moving_average(samples, order=5):
+def moving_average(samples, int order=5):
     # https://www.otexts.org/fpp/6/2
     n_samples = len(samples)
     ma = np.zeros(n_samples - order + 1)
@@ -375,7 +375,7 @@ def lz_complexity(samples):
 
 
 # extract features from raw sample points of the original ECG signal
-def extract_features(samples, sampling_rate, plotting=False):
+def extract_features(samples, int sampling_rate, plotting=False):
     features = []
     n_samples = len(samples)
     duration = int(n_samples / sampling_rate)
