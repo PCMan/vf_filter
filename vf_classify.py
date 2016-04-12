@@ -22,7 +22,7 @@ def balanced_error_rate(y_true, y_predict):
     fn = np.sum(np.logical_and(pred_negative, incorrect))
     n_positive = np.sum(y_true)
     n_negative = len(y_true) - n_positive
-    return 0.5 * (float(fn) / n_positive + float(fp) / n_negative)
+    return 0.5 * fn / n_positive + fp / n_negative)
 
 
 def classification_report(y_true, y_predict, x_test_info=None):
@@ -34,7 +34,7 @@ def classification_report(y_true, y_predict, x_test_info=None):
     tn = np.sum(np.logical_and(pred_negative, correct))
     fn = np.sum(np.logical_and(pred_negative, incorrect))
     print("tp =%d, fp = %d, tn = %d, fn = %d" % (tp, fp, tn, fn))
-    print("sensitivity:", float(tp) / (tp + fn), "specificity:", float(tn) / (tn + fp), "precision:", float(tp) / (tp + fp))
+    print("sensitivity:", tp / (tp + fn), "specificity:", tn / (tn + fp), "precision:", tp / (tp + fp))
 
 
 def list_classification_errors(y_true, y_predict, x_info):
@@ -82,7 +82,7 @@ def main():
     estimator = linear_model.LogisticRegressionCV(scoring=cv_scorer)
     estimator.fit(x_train, y_train)
     y_predict = estimator.predict(x_test)
-    # print "Logistic regression: error:", float(np.sum(y_predict != y_test) * 100) / len(y_test), "%"
+    # print "Logistic regression: error:", np.sum(y_predict != y_test) * 100 / len(y_test), "%"
     print("Logistic regression: precision:\n", classification_report(y_test, y_predict), estimator.scores_, "\n")
     output_errors(y_test, y_predict, x_indicies=x_test_idx, filename="log_reg_errors.txt")
 

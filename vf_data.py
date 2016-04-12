@@ -85,11 +85,6 @@ class Record:
             segment_end = segment_begin + segment_size
 
             segment_signals = self.signals[segment_begin:segment_end]
-            # convert to float first for later calculations
-            # FIXME: this seems to be a python2 problem?
-            if segment_signals.dtype != "float64":
-                segment_signals = segment_signals.astype("float64")
-
             segment = Segment(record=self.name, sampling_rate=self.sampling_rate, signals=segment_signals, begin_time=segment_begin)
 
             segment.has_vf = in_vf_episode  # label of the segment

@@ -115,8 +115,8 @@ def threshold_crossing_intervals(samples, n_samples, sampling_rate, threshold_ra
         if n == 0:
             tci = 1000
         else:
-            divider = (n - 1 + float(t2)/(t1 + t2) + float(t3)/(t3 + t4))
-            tci = float(1000) / divider
+            divider = (n - 1 + t2/(t1 + t2) + t3/(t3 + t4))
+            tci = 1000 / divider
         tcis.append(tci)
     # print "  TCIs:", tcis
     return tcis
@@ -147,7 +147,7 @@ def standard_exponential(samples, sampling_rate, time_constant=3):
             if sample > threshold:
                 higher = True
                 n_crosses += 1
-    duration = float(len(samples)) / sampling_rate
+    duration = len(samples) / sampling_rate
     return n_crosses / duration
 
 
@@ -181,7 +181,7 @@ def modified_exponential(samples, sampling_rate, peak_threshold=0.2, time_consta
         sample = samples[t]
         # calculate the exponential value
         local_max = samples[max_time]
-        et = local_max * np.exp(-float(t - max_time) / time_constant)
+        et = local_max * np.exp(-(t - max_time) / time_constant)
         # exp_value.append(et)
         if et < sample:  # cross happens
             # lift the curve again
@@ -200,8 +200,8 @@ def modified_exponential(samples, sampling_rate, peak_threshold=0.2, time_consta
     plt.plot(exp_value)
     plt.show()
     '''
-    duration = float(n_samples) / sampling_rate
-    return float(n_lifted) / duration
+    duration = n_samples / sampling_rate
+    return n_lifted / duration
 
 
 # Mean absolute value (MAV)
@@ -249,7 +249,7 @@ def phase_space_reconstruction(samples, sampling_rate, delay=0.5):
 
     grid = np.zeros((40, 40))
     grid[grid_y, grid_x] = 1
-    return float(np.sum(grid)) / 1600
+    return np.sum(grid) / 1600
 
 
 # Bandpass filter:
@@ -376,11 +376,6 @@ def extract_features(samples, sampling_rate, plotting=False):
     features = []
     n_samples = len(samples)
     duration = int(n_samples / sampling_rate)
-
-    # convert to float first for later calculations
-    # FIXME: this seems to be a python2 problem?
-    if samples.dtype != "float64":
-        samples = samples.astype("float64")
 
     if plotting:
         f, ax = plt.subplots(5, sharex=True)
