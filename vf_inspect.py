@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # coding: utf-8
 import vf_features
-import cPickle as pickle  # python 2 only
+import pickle as pickle  # python 2 only
 import numpy as np
 import matplotlib.pyplot as plt
 import sys
@@ -24,7 +24,7 @@ def main():
                 all_errors[error_idx] = all_errors.get(error_idx, 0) + 1
 
     common_errors = sorted([idx for idx in all_errors if all_errors[idx] == len(error_logs)])
-    print "# of common errors in all classifiers:", len(common_errors)
+    print("# of common errors in all classifiers:", len(common_errors))
 
     segments_cache_name = "all_segments.dat"
     # load cached segments if they exist
@@ -48,13 +48,13 @@ def main():
                 else:
                     break
                 if show:
-                    print "error:", segment.record, ", sample rate:", segment.sampling_rate, ", sample #:", segment.begin_time, ", has Vf:", segment.has_vf
+                    print("error:", segment.record, ", sample rate:", segment.sampling_rate, ", sample #:", segment.begin_time, ", has Vf:", segment.has_vf)
                     # plt.plot(segment.signals)
                     # plt.show()
                     features = vf_features.extract_features(segment.signals, segment.sampling_rate, plotting=True)
-                    print features
+                    print(features)
     except Exception:
-        print sys.exc_info()
+        print(sys.exc_info())
         pass
 
 

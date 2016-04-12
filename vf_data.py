@@ -1,31 +1,22 @@
-#!/usr/bin/env python2
-# coding: utf-8
+#!/usr/bin/env python3
 from ctypes import *
 import numpy as np
 import scipy.signal
 import os
-try:
-    import wfdb
-except Exception:
-    print "Warning: unable to import wfdb library."
-
 from vf_features import extract_features
-# import pickle
-import cPickle as pickle  # python 2 only
+import pickle
 import multiprocessing as mp
 
 
 DEFAULT_SAMPLING_RATE = 360.0
-
+dataset_dir = os.path.join(os.path.dirname(__file__), "datasets")
 
 # get name of records from a database
 def get_records(db_name):
     records = []
-    dirname = os.path.expanduser("~/database/{0}".format(db_name))
+    dirname = os.path.join(dataset_dir, db_name)
     for name in os.listdir(dirname):
-        if name.endswith(".dat"):
-            record = os.path.splitext(name)[0]
-            records.append(record)
+        records.append(name)
     records.sort()
     return records
 
@@ -41,17 +32,11 @@ class Segment:
 
 
 class Annotation:
-    # ann is an instance of wfdb.WFDB_Annotation
-    def __init__(self, ann):
-        self.time = ann.time
-        ann_code = ord(ann.anntyp)
-        self.code = wfdb.annstr(ann_code)
-        self.sub_type = ord(ann.subtyp)
-        self.rhythm_type = ""
-        if ann.aux:
-            # the first byte of aux is the length of the string
-            aux_ptr = cast(ann.aux, c_void_p).value + 1  # skip the first byte
-            self.rhythm_type = cast(aux_ptr, c_char_p).value
+    def __init__(self, time, code, sub_type, rhythm_type):
+        self.time = time
+        self.code = code
+        self.sub_type = sub_type
+        self.rhythm_type = rhythm_type
 
 
 class Record:
@@ -65,38 +50,19 @@ class Record:
         record_name = "{0}/{1}".format(db_name, record)
         self.name = record_name
 
-        # query number of channels in this record
-        n_channels = wfdb.isigopen(record_name, None, 0)
+        record_filename = os.path.join(dataset_dir, db_name, record)
+        with open(record_filename, "rb") as f:
+            self.sampling_rate = pickle.load(f)
 
-        # query sampling rate of the record
-        self.sampling_rate = wfdb.sampfreq(record_name)
+            # read signals and convert to float ndarray
+            self.signals = np.array(pickle.load(f), dtype="float64")
 
-        # read the signals
-        sigInfo = (wfdb.WFDB_Siginfo * n_channels)()
-        sample_buf = (wfdb.WFDB_Sample * n_channels)()
-        signals = []
-        if wfdb.isigopen(record_name, byref(sigInfo), n_channels) == n_channels:
-            while wfdb.getvec(byref(sample_buf)) > 0:
-                sample = sample_buf[0]  # we only want the first channel
-                signals.append(sample)
-        signals = np.array(signals)
-
-        # read annotations
-        annotations = []
-        ann_name = wfdb.String("atr")
-        ann_info = (wfdb.WFDB_Anninfo * n_channels)()
-        for item in ann_info:
-            item.name = ann_name
-            item.stat = wfdb.WFDB_READ
-        if wfdb.annopen(record_name, byref(ann_info), n_channels) == 0:
-            ann_buf = (wfdb.WFDB_Annotation * n_channels)()
-            while wfdb.getann(0, byref(ann_buf)) == 0:
-                ann = ann_buf[0]  # we only want the first channel
-                annotation = Annotation(ann)
+            # read annotations
+            annotations = []
+            for ann in pickle.load(f):
+                annotation = Annotation(*ann)
                 annotations.append(annotation)
-
-        self.signals = signals
-        self.annotations = annotations
+            self.annotations = annotations
 
     def get_total_time(self):
         return len(self.signals) / self.sampling_rate
@@ -214,17 +180,17 @@ def load_all_segments(segment_queue):
         output.write('"db", "record", "vf", "non-vf"\n')
         for db_name in ("mitdb", "vfdb", "cudb"):
             for record_name in get_records(db_name):
-                print "read record:", db_name, record_name
+                print(("read record:", db_name, record_name))
                 record = Record()
                 record.load(db_name, record_name)
-                # print "  sample rate:", record.sampling_rate, "# of samples:", len(record.signals), ", # of anns:", len(record.annotations)
+                # print("  sample rate:", record.sampling_rate, "# of samples:", len(record.signals), ", # of anns:", len(record.annotations))
 
                 segments = record.get_segments(segment_duration)
 
                 n_vf = np.sum([1 if segment.has_vf else 0 for segment in segments])
                 n_non_vf = len(segments) - n_vf
                 output.write('"{0}","{1}",{2},{3}\n'.format(db_name, record_name, n_vf, n_non_vf))
-                print "  segments:", (n_vf + n_non_vf), "# of vf segments (label=1):", n_vf
+                print("  segments:", (n_vf + n_non_vf), "# of vf segments (label=1):", n_vf)
 
                 for segment in segments:
                     if segment.has_artifact:  # exclude segments with artifacts
@@ -234,7 +200,6 @@ def load_all_segments(segment_queue):
                     if cache_file:  # cache the segment
                         pickle.dump(segment, cache_file)
 
-        wfdb.wfdbquit()
         output.close()
         if cache_file:
             cache_file.close()
@@ -296,7 +261,7 @@ def load_data(n_jobs):
                 y_data.append(label)
                 # store mapping of feature and the segment it's built from
                 x_info.append((record, begin_time))
-                print "feature", len(x_data), ":", record, begin_time, feature, label
+                print("feature", len(x_data), ":", record, begin_time, feature, label)
             except Exception:
                 break
         x_data = np.array(x_data)
@@ -310,6 +275,6 @@ def load_data(n_jobs):
                 pickle.dump(x_info, f)
         except Exception:
             pass
-        print "features are extracted."
+        print("features are extracted.")
 
     return x_data, y_data, np.array(x_info)

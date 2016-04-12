@@ -16,7 +16,7 @@ def main():
 
     # load features
     x_data, y_data, x_info = load_data(N_JOBS)
-    print "Summary:\n", "# of segments:", len(x_data), "# of VT/Vf:", np.sum(y_data), len(x_info)
+    print("Summary:\n", "# of segments:", len(x_data), "# of VT/Vf:", np.sum(y_data), len(x_info))
     # normalize the features
     preprocessing.normalize(x_data)
 
@@ -26,17 +26,17 @@ def main():
 
     feature_names = ("TCSC", "TCI", "STE", "MEA", "PSR", "VF", "SPEC", "LZ", "SpEn")
 
-    print "feature scores (stability selection):"
+    print("feature scores (stability selection):")
     for name, score in zip(feature_names, estimator.scores_):
-        print name, ":", score
+        print(name, ":", score)
 
-    print ""
+    print("")
 
     estimator = ensemble.RandomForestClassifier()
     estimator.fit(x_data, y_data)
-    print "feature scores (tree selection):"
+    print("feature scores (tree selection):")
     for name, score in zip(feature_names, estimator.feature_importances_):
-        print name, ":", score
+        print(name, ":", score)
 
 
 if __name__ == "__main__":

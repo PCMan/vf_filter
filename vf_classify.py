@@ -1,5 +1,4 @@
-#!/usr/bin/env python2
-# coding: utf-8
+#!/usr/bin/env python3
 import numpy as np
 from sklearn import preprocessing
 from sklearn import linear_model
@@ -34,16 +33,16 @@ def classification_report(y_true, y_predict, x_test_info=None):
     fp = np.sum(np.logical_and(y_predict, incorrect))
     tn = np.sum(np.logical_and(pred_negative, correct))
     fn = np.sum(np.logical_and(pred_negative, incorrect))
-    print "tp =%d, fp = %d, tn = %d, fn = %d" % (tp, fp, tn, fn)
-    print "sensitivity:", float(tp) / (tp + fn), "specificity:", float(tn) / (tn + fp), "precision:", float(tp) / (tp + fp)
+    print("tp =%d, fp = %d, tn = %d, fn = %d" % (tp, fp, tn, fn))
+    print("sensitivity:", float(tp) / (tp + fn), "specificity:", float(tn) / (tn + fp), "precision:", float(tp) / (tp + fp))
 
 
 def list_classification_errors(y_true, y_predict, x_info):
     incorrect = (y_true != y_predict)
-    print "list segments with errors:"
+    print("list segments with errors:")
     for info in x_info[incorrect]:
         (record, begin_time) = info
-        print "  ", record, begin_time
+        print("  ", record, begin_time)
 
 
 def output_errors(y_true, y_predict, x_indicies, filename):
@@ -62,10 +61,10 @@ def main():
     # feature selection
     # x_data = x_data[:, (0, 1, 4, 5, 6)]
 
-    print "Summary:\n", "# of segments:", len(x_data), "# of VT/Vf:", np.sum(y_data), len(x_info)
+    print("Summary:\n", "# of segments:", len(x_data), "# of VT/Vf:", np.sum(y_data), len(x_info))
     # normalize the features
     preprocessing.normalize(x_data)
-    x_indicies = range(0, len(x_data))
+    x_indicies = list(range(0, len(x_data)))
 
     # Here we split the indicies of the rows rather than the data array itself.
     x_train_idx, x_test_idx, y_train, y_test = cross_validation.train_test_split(x_indicies, y_data, test_size=0.3, stratify=y_data)
@@ -84,13 +83,13 @@ def main():
     estimator.fit(x_train, y_train)
     y_predict = estimator.predict(x_test)
     # print "Logistic regression: error:", float(np.sum(y_predict != y_test) * 100) / len(y_test), "%"
-    print "Logistic regression: precision:\n", classification_report(y_test, y_predict), estimator.scores_, "\n"
+    print("Logistic regression: precision:\n", classification_report(y_test, y_predict), estimator.scores_, "\n")
     output_errors(y_test, y_predict, x_indicies=x_test_idx, filename="log_reg_errors.txt")
 
     # Random forest
     estimator = ensemble.RandomForestClassifier()
     grid = grid_search.GridSearchCV(estimator, {
-                                        "n_estimators": range(10, 110, 10)
+                                        "n_estimators": list(range(10, 110, 10))
                                     },
                                     scoring=cv_scorer,
                                     n_jobs=n_jobs, cv=N_CV_FOLDS, verbose=1)
@@ -104,7 +103,7 @@ def main():
     false_pos_rate, true_pos_rate, thresholds = metrics.roc_curve(y_test, y_predict_scores)
     # find sensitivity at 95% specificity
     x = np.searchsorted(false_pos_rate, ALLOWED_FALSE_POS_RATE)
-    print "RF: Se when Sp is 95%", true_pos_rate[x] * 100, "%"
+    print("RF: Se when Sp is 95%", true_pos_rate[x] * 100, "%")
     '''
     import matplotlib.pyplot as plt
     plt.plot(false_pos_rate, true_pos_rate)
@@ -132,7 +131,7 @@ def main():
     y_predict_scores = grid.predict_proba(x_test)[:, 1]
     false_pos_rate, true_pos_rate, thresholds = metrics.roc_curve(y_test, y_predict_scores)
     x = np.searchsorted(false_pos_rate, ALLOWED_FALSE_POS_RATE)
-    print "SVC: Se when Sp is 95%", true_pos_rate[x] * 100, "%"
+    print("SVC: Se when Sp is 95%", true_pos_rate[x] * 100, "%")
 
 
     """
@@ -153,8 +152,8 @@ def main():
     # Gradient boosting
     estimator = ensemble.GradientBoostingClassifier(learning_rate=0.1)
     grid = grid_search.GridSearchCV(estimator, {
-                                        "n_estimators": range(150, 250, 10),
-                                        "max_depth": range(3, 8)
+                                        "n_estimators": list(range(150, 250, 10)),
+                                        "max_depth": list(range(3, 8))
                                     },
                                     scoring=cv_scorer,
                                     n_jobs=n_jobs, cv=N_CV_FOLDS, verbose=1)
@@ -172,7 +171,7 @@ def main():
     y_predict_scores = grid.predict_proba(x_test)[:, 1]
     false_pos_rate, true_pos_rate, thresholds = metrics.roc_curve(y_test, y_predict_scores)
     x = np.searchsorted(false_pos_rate, ALLOWED_FALSE_POS_RATE)
-    print "GB: Se when Sp is 95%", true_pos_rate[x] * 100, "%"
+    print("GB: Se when Sp is 95%", true_pos_rate[x] * 100, "%")
 
 
 if __name__ == "__main__":

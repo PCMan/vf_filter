@@ -73,6 +73,7 @@ def main():
                 pickle.dump(signals, f, pickle.HIGHEST_PROTOCOL)
                 pickle.dump(annotations, f, pickle.HIGHEST_PROTOCOL)
 
+        wfdb.wfdbquit()
 
 if __name__ == "__main__":
     main()
