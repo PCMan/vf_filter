@@ -94,9 +94,9 @@ def main():
                                     scoring=cv_scorer,
                                     n_jobs=n_jobs, cv=N_CV_FOLDS, verbose=1)
     grid.fit(x_train, y_train)
-    # y_predict = grid.predict(x_test)
-    # print "RandomForest:\n", classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n"
-    # output_errors(y_test, y_predict, x_indicies=x_test_idx, filename="rf_errors.txt")
+    y_predict = grid.predict(x_test)
+    print("RandomForest:\n", classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n")
+    output_errors(y_test, y_predict, x_indicies=x_test_idx, filename="rf_errors.txt")
 
     # prediction with probabilities
     y_predict_scores = grid.predict_proba(x_test)[:, 1]
@@ -121,11 +121,9 @@ def main():
                                     scoring=cv_scorer,
                                     n_jobs=n_jobs, cv=N_CV_FOLDS, verbose=1)
     grid.fit(x_train, y_train)
-    '''
     y_predict = grid.predict(x_test)
-    print "SVC:\n", classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n"
+    print("SVC:\n", classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n")
     output_errors(y_test, y_predict, x_indicies=x_test_idx, filename="svc_errors.txt")
-    '''
 
     # prediction with probabilities
     y_predict_scores = grid.predict_proba(x_test)[:, 1]
@@ -158,14 +156,12 @@ def main():
                                     scoring=cv_scorer,
                                     n_jobs=n_jobs, cv=N_CV_FOLDS, verbose=1)
     grid.fit(x_train, y_train)
-    '''
     y_predict = grid.predict(x_test)
-    print "Gradient Boosting:\n", classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n"
+    print("Gradient Boosting:\n", classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n")
     # list_classification_errors(y_test, y_predict, x_info=x_test_info)
     # debugging:
     # inspect segments with errors
     output_errors(y_test, y_predict, x_indicies=x_test_idx, filename="gb_errors.txt")
-    '''
 
     # prediction with probabilities
     y_predict_scores = grid.predict_proba(x_test)[:, 1]
