@@ -11,7 +11,7 @@ from joblib.pool import has_shareable_memory
 from array import array
 
 
-DEFAULT_SAMPLING_RATE = 250.0
+cdef int DEFAULT_SAMPLING_RATE = 250
 # dataset_dir = os.path.join(os.path.dirname(__file__), "datasets")
 dataset_dir = "datasets"
 
@@ -27,7 +27,7 @@ def get_records(db_name):
 
 
 class Segment:
-    def __init__(self, record, sampling_rate, signals, begin_time):
+    def __init__(self, record, int sampling_rate, signals, int begin_time):
         self.record = record
         self.sampling_rate = sampling_rate
         self.signals = signals
@@ -37,7 +37,7 @@ class Segment:
 
 
 class Annotation:
-    def __init__(self, time, code, sub_type, rhythm_type):
+    def __init__(self, int time, code, sub_type, rhythm_type):
         self.time = time
         self.code = code
         self.sub_type = sub_type
@@ -72,16 +72,16 @@ class Record:
 
     # perform segmentation
     def get_segments(self, duration=8.0):
-        n_samples = len(self.signals)
-        segment_size = int(self.sampling_rate * duration)
-        n_segments = int(np.floor(n_samples / segment_size))
+        cdef int n_samples = len(self.signals)
+        cdef int segment_size = int(self.sampling_rate * duration)
+        cdef int n_segments = int(np.floor(n_samples / segment_size))
         segments = []
 
         annotations = self.annotations
-        n_annotations = len(annotations)
-        i_ann = 0
-        in_vf_episode = False
-        in_artifacts = False
+        cdef int n_annotations = len(annotations)
+        cdef int i_ann = 0
+        cdef bint in_vf_episode = False
+        cdef bint in_artifacts = False
         for i_seg in range(n_segments):
             # split the segment
             segment_begin = i_seg * segment_size
@@ -152,8 +152,8 @@ class Record:
 # implement as a generator for ECG segments
 def load_all_segments():
     segments_cache_name = "all_segments.dat"
-    segment_duration = 8  # 8 sec per segment
-    loaded_from_cache = False
+    cdef double segment_duration = 8  # 8 sec per segment
+    cdef bint loaded_from_cache = False
 
     # load cached segments if they exist
     try:
@@ -209,7 +209,7 @@ def load_all_segments():
 
 
 def extract_features_job(segment):
-    segment_duration = 8  # 8 sec per segment
+    cdef double segment_duration = 8  # 8 sec per segment
     # resample to DEFAULT_SAMPLING_RATE as needed
     signals = segment.signals
     if segment.sampling_rate != DEFAULT_SAMPLING_RATE:

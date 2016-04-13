@@ -85,7 +85,7 @@ def main():
     estimator.fit(x_train, y_train)
     y_predict = estimator.predict(x_test)
     # print "Logistic regression: error:", np.sum(y_predict != y_test) * 100 / len(y_test), "%"
-    print("Logistic regression: precision:\n", classification_report(y_test, y_predict), estimator.scores_, "\n")
+    print("Logistic regression:\n", classification_report(y_test, y_predict), np.max(estimator.scores_), "\n")
     output_errors(y_test, y_predict, x_indicies=x_test_idx, filename="log_reg_errors.txt")
 
     # Random forest
