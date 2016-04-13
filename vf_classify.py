@@ -60,7 +60,7 @@ def main():
     x_data, y_data, x_info = load_data(n_jobs)
 
     # feature selection
-    x_data = x_data[:, (0, 1, 4, 5, 6, 7, 8)]
+    # x_data = x_data[:, (0, 1, 4, 5, 6, 7, 8)]
 
     print("Summary:\n", "# of segments:", len(x_data), "# of VT/Vf:", np.sum(y_data), len(x_info))
     # normalize the features

@@ -14,7 +14,7 @@ feature_names = ("TCSC", "TCI", "STE", "MEA", "PSR", "VF", "SPEC", "LZ", "SpEn")
 
 # time domain/morphology
 
-def threshold_crossing_count(samples, threshold_ratio=0.2):
+cdef threshold_crossing_count(samples, float threshold_ratio=0.2):
     threshold = threshold_ratio * np.max(samples)
     n_cross = 0
     higher = samples[0] >= threshold
@@ -42,7 +42,7 @@ def threshold_crossing_count(samples, threshold_ratio=0.2):
     return n_cross, first_cross, last_cross
 
 
-def tcsc_cosine_window(float duration, int sampling_rate):
+cdef tcsc_cosine_window(float duration, int sampling_rate):
     sampling_rate = int(sampling_rate)
     window_size = int(duration * sampling_rate)
 
@@ -60,8 +60,7 @@ def tcsc_cosine_window(float duration, int sampling_rate):
 # TCSC feature
 # Muhammad Abdullah Arafat et al. 2011. A simple time domain algorithm for the detection of
 # ventricular fibrillation in electrocardiogram.
-def threshold_crossing_sample_counts(samples, int n_samples, int sampling_rate, float window_duration, float threshold_ratio=0.2):
-    sampling_rate = int(sampling_rate)  # force the use of integer type for sampling rate
+cdef threshold_crossing_sample_counts(samples, int n_samples, int sampling_rate, float window_duration=3.0, float threshold_ratio=0.2):
     # steps:
     # 1. multiply the samples by a cosine window
     #  w(t) = 1/2(1-cos(4*pi*t)), if 0 <= t <= 1/4 or Ls-1/4 <= t <= Ls
@@ -71,9 +70,9 @@ def threshold_crossing_sample_counts(samples, int n_samples, int sampling_rate, 
     # 4. calculate the samples that cross V0 (number of 1s in the binary sequence)
     #    N = <# of samples that cross V0> / <# of samples> * 100
     # 5. average all Ls-2 N values
-    window_size = int(window_duration * sampling_rate)
-    window_begin = 0
-    window_end = window_size
+    cdef int window_size = int(window_duration * sampling_rate)
+    cdef int window_begin = 0
+    cdef int window_end = window_size
     tcsc = []
     while window_end <= n_samples:
         # moving window
@@ -96,11 +95,10 @@ def threshold_crossing_sample_counts(samples, int n_samples, int sampling_rate, 
 
 
 # average threshold crossing interval
-def threshold_crossing_intervals(samples, int n_samples, int sampling_rate, float threshold_ratio=0.2):
-    sampling_rate = int(sampling_rate)  # force the use of integer type for sampling rate
-    window_size = int(sampling_rate)  # calculate 1 TCI value per second
-    window_begin = 0
-    window_end = window_size
+cdef threshold_crossing_intervals(samples, int n_samples, int sampling_rate, float threshold_ratio=0.2):
+    cdef int window_size = int(sampling_rate)  # calculate 1 TCI value per second
+    cdef int window_begin = 0
+    cdef int window_end = window_size
     results = []
     while window_end <= n_samples:
         window = samples[window_begin:window_end]
@@ -126,20 +124,20 @@ def threshold_crossing_intervals(samples, int n_samples, int sampling_rate, floa
     return tcis
 
 
-def standard_exponential(samples, sampling_rate, time_constant=3):
+cdef float standard_exponential(samples, int sampling_rate, int time_constant=3):
     # find the max amplitude in the sample sequence
     # put an exponential like function through this point
     # E(t) = M * exp(- |t-tm| / tc), where
     # M: max signal amplitude at time tm
     # tc: time constant (default to 3)
-    max_time = np.argmax(samples)
-    max_amplitude = samples[max_time]
+    cdef int max_time = np.argmax(samples)
+    cdef float max_amplitude = samples[max_time]
     time_constant *= sampling_rate  # convert time from second to samples
 
     # exp_func(t) = max_amplitude * np.exp(-np.abs(t - max_time) / time_constant)
     # calculate intersections n of this curve with the ECG signal
-    n_crosses = 0.0
-    higher = True if samples[0] > max_amplitude * np.exp(-np.abs(0 - max_time) / time_constant) else False
+    cdef float n_crosses = 0.0
+    cdef bint higher = True if samples[0] > max_amplitude * np.exp(-np.abs(0 - max_time) / time_constant) else False
     for t in range(1, len(samples) - 1):
         threshold = max_amplitude * np.exp(-np.abs(t - max_time) / time_constant)
         sample = samples[t]
@@ -151,18 +149,18 @@ def standard_exponential(samples, sampling_rate, time_constant=3):
             if sample > threshold:
                 higher = True
                 n_crosses += 1
-    duration = len(samples) / sampling_rate
+    cdef float duration = len(samples) / sampling_rate
     return n_crosses / duration
 
 
-def find_first_local_maximum(x, start=0, threshold=0.0):
+cdef int find_first_local_maximum(x, int start=0, float threshold=0.0):
     for i in range(start + 1, len(x) - 1):
         if (x[i] - x[i - 1]) >= 0 >= (x[i + 1] - x[i]) and (x[i] >= threshold):
             return i
     return -1
 
 
-def modified_exponential(samples, sampling_rate, peak_threshold=0.2, time_constant=0.2):
+cdef float modified_exponential(samples, int sampling_rate, float peak_threshold=0.2, float time_constant=0.2):
     # similar to standard exponential, but uses relative max, not global max.
     # lift the exponential curve to the relative max again at every intersection.
     # E(t) = Mj * exp(-(t - tm,j) / T), tm,j <= t <= tc,j
@@ -170,16 +168,16 @@ def modified_exponential(samples, sampling_rate, peak_threshold=0.2, time_consta
     #   Mj: the jth local maximum, tm,j: its time
     #   T: time constant: default to 2.0 second
     #   tc,j: the time value of cross
-    n_lifted = 0
+    cdef int n_lifted = 0
     samples = np.array(samples)
-    n_samples = len(samples)
-    time_constant = time_constant * sampling_rate  # in terms of samples
+    cdef int n_samples = len(samples)
+    time_constant *= sampling_rate  # in terms of samples
     # find all local maximum and get their time values
     # FIXME: the original paper does not describe how to correctly identify peaks.
     # Let's set a simple threshold here. :-(
     peak_threshold *= np.max(samples)
-    max_time = find_first_local_maximum(samples, start=0, threshold=peak_threshold)
-    t = max_time + 1
+    cdef int max_time = find_first_local_maximum(samples, start=0, threshold=peak_threshold)
+    cdef int t = max_time + 1
     # exp_value = list(samples[0:t])
     while t < n_samples:
         sample = samples[t]
@@ -204,7 +202,7 @@ def modified_exponential(samples, sampling_rate, peak_threshold=0.2, time_consta
     plt.plot(exp_value)
     plt.show()
     '''
-    duration = n_samples / sampling_rate
+    cdef float duration = n_samples / sampling_rate
     return n_lifted / duration
 
 
@@ -212,14 +210,14 @@ def modified_exponential(samples, sampling_rate, peak_threshold=0.2, time_consta
 # Emran M Abu Anas et al. 2010. Sequential algorithm for life threatening cardiac pathologies detection based on
 # mean signal strength and EMD functions.
 # http://biomedical-engineering-online.biomedcentral.com/articles/10.1186/1475-925X-9-43
-def mean_absolute_value(samples, int sampling_rate, float window_duration=2.0):
+cdef float mean_absolute_value(samples, int sampling_rate, float window_duration=2.0):
     # pre-processing: mean subtraction
     # FIXME: the samples we got here already received normalization, which is different from that in the original paper
-    n_samples = len(samples)
+    cdef int n_samples = len(samples)
     mavs = []
-    window_size = sampling_rate * window_duration
-    window_begin = 0
-    window_end = window_size
+    cdef int window_size = int(sampling_rate * window_duration)
+    cdef int window_begin = 0
+    cdef int window_end = window_size
     # 2-sec moving window with 1 sec step
     while window_end <= n_samples:
         # normalization within the window
@@ -236,7 +234,7 @@ def mean_absolute_value(samples, int sampling_rate, float window_duration=2.0):
 # 2007. Anton Amann et al. Detecting Ventricular Fibrillation by Time-Delay Methods
 # Plotting the time sequence on a phase space plot, and then calculate the boxes
 # visited in a 40x40 grid.
-def phase_space_reconstruction(samples, int sampling_rate, float delay=0.5):
+cdef float phase_space_reconstruction(samples, int sampling_rate, float delay=0.5):
     # phase space plotting
     # each data point is: x: x(t), y: x(t + T), where T = 0.5 s by default.
     n_samples = len(samples)
@@ -258,7 +256,7 @@ def phase_space_reconstruction(samples, int sampling_rate, float delay=0.5):
 
 # Bandpass filter:
 # http://scipy.github.io/old-wiki/pages/Cookbook/ButterworthBandpass
-def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
+cdef butter_bandpass_filter(data, float lowcut, float highcut, float fs, int order=5):
     nyq = 0.5 * fs
     low = lowcut / nyq
     high = highcut / nyq
@@ -267,7 +265,7 @@ def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
     return y
 
 
-def butter_lowpass_filter(data, highcut, fs, order=5):
+cdef butter_lowpass_filter(data, float highcut, float fs, int order=5):
     nyq = 0.5 * fs
     high = highcut / nyq
     b, a = butter(order, high, btype='low')
@@ -286,14 +284,14 @@ def moving_average(samples, int order=5):
 
 
 # find the peak frequency and its index in the FFT spectrum
-def find_peak_freq(fft, fft_freq):
-    n_freq = len(fft) // 2
-    peak_freq_idx = fft[:n_freq].argmax()
-    return peak_freq_idx, fft_freq[peak_freq_idx]
+cdef int find_peak_freq(fft, fft_freq):
+    cdef int n_freq = len(fft) // 2
+    cdef int peak_freq_idx = fft[:n_freq].argmax()
+    return peak_freq_idx
 
 
 # the VF leak algorithm
-def vf_leak(samples, float peak_freq):
+cdef float vf_leak(samples, float peak_freq):
     # From Computers in Cardiology 2002;29:213−216.
     # This method separates nearly sinusoidal waveforms from the rest.
     # VF is nearly sinusoidal. The idea is to move such signal by half period
@@ -317,10 +315,10 @@ def vf_leak(samples, float peak_freq):
 # The implementation provided by sampen python package is also slow.
 # here we use sample entropy implemented by PyEEG project, which is a little bit faster.
 # https://github.com/forrestbao/pyeeg
-def sample_entropy(samples, int window_size):
-    window_begin = 0
-    window_end = window_size
-    n_samples = len(samples)
+cdef float sample_entropy(samples, int window_size):
+    cdef int window_begin = 0
+    cdef int window_end = window_size
+    cdef int n_samples = len(samples)
     results = []
     while window_end <= n_samples:
         # Ref: Haiyan Li. 2009 Detecting Ventricular Fibrillation by Fast Algorithm of Dynamic Sample Entropy
@@ -339,17 +337,18 @@ def sample_entropy(samples, int window_size):
 
 # Implement the algorithm described in the paper:
 # Xu-Sheng Zhang et al. 1999. Detecting Ventricular Tachycardia and Fibrillation by Complexity Measure
-def lz_complexity(samples):
-    cn = 0
+cdef float lz_complexity(samples):
+    cdef int cn = 0
 
     # find optimal threshold
-    pos_peak = np.max(samples)  # positive peak
-    neg_peak = np.min(samples)  # negative peak
-    n_samples = len(samples)
+    cdef float pos_peak = np.max(samples)  # positive peak
+    cdef float neg_peak = np.min(samples)  # negative peak
+    cdef int n_samples = len(samples)
 
-    pos_count = np.sum(np.logical_and(0.1 * pos_peak > samples, samples > 0))
-    neg_count = np.sum(np.logical_and(0.1 * neg_peak < samples, samples < 0))
+    cdef int pos_count = np.sum(np.logical_and(0.1 * pos_peak > samples, samples > 0))
+    cdef int neg_count = np.sum(np.logical_and(0.1 * neg_peak < samples, samples < 0))
 
+    cdef float threshold = 0.0
     if (pos_count + neg_count) < 0.4 * n_samples:
         threshold = 0.0
     elif pos_count < neg_count:
@@ -372,11 +371,11 @@ def lz_complexity(samples):
             q = bytearray([bin_str[i]])
 
     # normalization => C(n) = c(n)/b(n), b(n) = n/log2 n
-    bn = n_samples / np.log2(n_samples)
+    cdef float bn = n_samples / np.log2(n_samples)
     return cn / bn
 
 
-def preprocessing(samples, sampling_rate, plotting=False):
+cpdef preprocessing(samples, int sampling_rate, bint plotting=False):
     n_samples = len(samples)
 
     if plotting:
@@ -428,7 +427,7 @@ def extract_features(samples, int sampling_rate):
     # get all crossing points, use 20% of maximum as threshold
     # calculate average TCSC using a 3-s window
     # using 3-s moving window
-    tcsc = threshold_crossing_sample_counts(samples, len(samples), sampling_rate=sampling_rate, window_duration=3, threshold_ratio=0.1)
+    tcsc = threshold_crossing_sample_counts(samples, len(samples), sampling_rate=sampling_rate, window_duration=3.0, threshold_ratio=0.1)
     features.append(np.mean(tcsc))
     # features.append(np.std(tcsc))
 
@@ -459,7 +458,8 @@ def extract_features(samples, int sampling_rate):
     fft = np.fft.fft(samples * hamming(n_samples))
     fft_freq = np.fft.fftfreq(n_samples)
 
-    peak_freq_idx, peak_freq = find_peak_freq(fft, fft_freq)
+    cdef int peak_freq_idx = find_peak_freq(fft, fft_freq)
+    cdef float peak_freq = fft_freq[peak_freq_idx]
 
     # calculate VF leaks
     features.append(vf_leak(samples, peak_freq))
