@@ -14,7 +14,7 @@ import multiprocessing as mp
 
 N_CV_FOLDS = 10
 ALLOWED_FALSE_POS_RATE = 0.05  # 1 - specificity
-CLASS_WEIGHT="balanced"
+CLASS_WEIGHT = None  # "balanced"
 
 
 def balanced_error_rate(y_true, y_predict):
