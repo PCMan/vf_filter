@@ -94,7 +94,7 @@ def main():
                                         "n_estimators": list(range(10, 110, 10))
                                     },
                                     scoring=cv_scorer,
-                                    n_jobs=n_jobs, cv=N_CV_FOLDS, verbose=1)
+                                    n_jobs=n_jobs, cv=N_CV_FOLDS, verbose=0)
     grid.fit(x_train, y_train)
     y_predict = grid.predict(x_test)
     print("RandomForest:\n", classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n")
@@ -118,10 +118,10 @@ def main():
     estimator = svm.SVC(shrinking=False, cache_size=2048, verbose=False, probability=True, class_weight=CLASS_WEIGHT)
     grid = grid_search.RandomizedSearchCV(estimator, {
                                         "C": np.logspace(-2, 1, 4),
-                                        "gamma": np.logspace(-2, 1, 4)
+                                        "gamma": np.logspace(-2, 0, 3)
                                     },
                                     scoring=cv_scorer,
-                                    n_jobs=n_jobs, cv=N_CV_FOLDS, verbose=1)
+                                    n_jobs=n_jobs, cv=N_CV_FOLDS, verbose=0)
     grid.fit(x_train, y_train)
     y_predict = grid.predict(x_test)
     print("SVC:\n", classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n")
@@ -143,7 +143,7 @@ def main():
                                     },
                                     n_iter=20,
                                     scoring=cv_scorer,
-                                    n_jobs=n_jobs, cv=N_CV_FOLDS, verbose=1)
+                                    n_jobs=n_jobs, cv=N_CV_FOLDS, verbose=0)
     grid.fit(x_train, y_train)
     y_predict = grid.predict(x_test)
     print "AdaBoost:\n", classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n"
@@ -156,7 +156,7 @@ def main():
                                         "max_depth": list(range(3, 8))
                                     },
                                     scoring=cv_scorer,
-                                    n_jobs=n_jobs, cv=N_CV_FOLDS, verbose=1)
+                                    n_jobs=n_jobs, cv=N_CV_FOLDS, verbose=0)
     grid.fit(x_train, y_train)
     y_predict = grid.predict(x_test)
     print("Gradient Boosting:\n", classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n")
