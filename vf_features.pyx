@@ -4,14 +4,13 @@
 # Felipe AA et al. 2014. Detection of Life-Threatening Arrhythmias Using Feature Selection and Support Vector Machines
 import pyximport; pyximport.install()  # use Cython
 import numpy as np
-from scipy.signal import butter, lfilter, hamming
-# import sampen  # calculate sample entropy
-import pyeeg
+from scipy.signal import butter, lfilter, hamming, resample, hilbert
+import pyeeg  # calculate sample entropy
 import matplotlib.pyplot as plt
 from array import array  # python array with static types
 
 
-feature_names = ("TCSC", "TCI", "STE", "MEA", "PSR", "VF", "SPEC", "LZ", "SpEn")
+feature_names = ("TCSC", "TCI", "STE", "MEA", "PSR", "HILB", "VF", "SPEC", "LZ", "SpEn")
 
 # time domain/morphology
 
@@ -255,6 +254,35 @@ cdef double phase_space_reconstruction(samples, int sampling_rate, double delay=
     return np.sum(grid) / 1600
 
 
+# HILB feature based on Hilbert transformation + phase space plot
+# A Amann et al. 2005. A New Ventricular Fibrillation Detection Algorithm for Automated External Defibrillators
+# Computers in Cardiology 2005;32:559−562.
+cdef double hilbert_psr(samples, int sampling_rate):
+    # each data point is: x: x(t), y: xH(t), where xH(t) is the Hilbert transform of x(t)
+    cdef float duration = len(samples) / sampling_rate
+    # down sample to 50 Hz for fast computation
+    cdef int n_samples = int(duration * 50)
+
+    # phase space plotting (40 x 40 grid)
+    x_samples = resample(samples, n_samples)
+    analytical_signals = hilbert(x_samples)
+    y_samples = np.imag(analytical_signals)  # the imaginary part of the analytical signal is the Hilbert transform of X(t)
+
+    cdef double x_offset = np.min(x_samples)
+    cdef double x_range = np.max(x_samples) - x_offset
+    cdef double y_offset = np.min(y_samples)
+    cdef double y_range = np.max(y_samples) - y_offset
+
+    # convert X and Y values to indices of the 40 x 40 grid
+    grid_x = ((x_samples - x_offset) * 39.0 / x_range).astype("int")
+    grid_y = ((y_samples - y_offset) * 39.0 / y_range).astype("int")
+
+    # calculate the number of visited cells
+    grid = np.zeros((40, 40))
+    grid[grid_y, grid_x] = 1
+    return np.sum(grid) / 1600
+
+
 # Bandpass filter:
 # http://scipy.github.io/old-wiki/pages/Cookbook/ButterworthBandpass
 cdef butter_bandpass_filter(data, double lowcut, double highcut, double fs, int order=5):
@@ -450,7 +478,11 @@ def extract_features(samples, int sampling_rate):
 
     # phase space reconstruction (PSR)
     psr = phase_space_reconstruction(samples, sampling_rate)
-    features.append(psr)
+    features.append(psr)  # phase space reconstruction (PSR)
+
+    # Hilbert transformation + PSR
+    hilb = hilbert_psr(samples, sampling_rate)
+    features.append(hilb)
 
     # spectral parameters (characteristics of power spectrum)
     # -------------------------------------------------
