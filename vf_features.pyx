@@ -448,12 +448,12 @@ def extract_features(samples, int sampling_rate):
     # get all crossing points, use 20% of maximum as threshold
     # calculate average TCSC using a 3-s window
     # using 3-s moving window
-    tcsc = threshold_crossing_sample_counts(samples, len(samples), sampling_rate=sampling_rate, window_duration=3.0, threshold_ratio=0.1)
+    tcsc = threshold_crossing_sample_counts(samples, len(samples), sampling_rate=sampling_rate, window_duration=3.0, threshold_ratio=0.2)
     features.append(np.mean(tcsc))
     # features.append(np.std(tcsc))
 
     # average TCI for every 1-second segments
-    tcis = threshold_crossing_intervals(samples, len(samples), sampling_rate=sampling_rate, threshold_ratio=0.1)
+    tcis = threshold_crossing_intervals(samples, len(samples), sampling_rate=sampling_rate, threshold_ratio=0.2)
     features.append(np.mean(tcis))
     # features.append(np.std(tcis))
 
