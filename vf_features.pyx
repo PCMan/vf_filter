@@ -10,6 +10,8 @@ import pyeeg
 import matplotlib.pyplot as plt
 
 
+feature_names = ("TCSC", "TCI", "STE", "MEA", "PSR", "VF", "SPEC", "LZ", "SpEn")
+
 # time domain/morphology
 
 def threshold_crossing_count(samples, threshold_ratio=0.2):
@@ -407,6 +409,7 @@ def preprocessing(samples, sampling_rate, plotting=False):
     if plotting:
         ax[4].set_title("band pass filter")
         ax[4].plot(samples)
+        ax[4].plot([0, len(samples)], [0.2, 0.2], 'r')  # draw a horizontal line at 0.2
         plt.plot(samples)
         plt.show()
     return samples

@@ -50,7 +50,9 @@ def main():
                 if show:
                     print("error:", segment.record, ", sample rate:", segment.sampling_rate, ", sample #:", segment.begin_time, ", has Vf:", segment.has_vf)
                     features = vf_features.extract_features(segment.signals, segment.sampling_rate)
-                    print(features)
+                    for name, feature in zip(vf_features.feature_names, features):
+                        print("{0}: {1}".format(name, feature))
+                    print("-----------------------------------------")
                     # plot the signals
                     vf_features.preprocessing(segment.signals, segment.sampling_rate, plotting=True)
     except Exception:

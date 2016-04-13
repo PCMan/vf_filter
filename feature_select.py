@@ -6,6 +6,7 @@ from sklearn import linear_model
 from sklearn import ensemble
 from sklearn.feature_selection import SelectFromModel
 from vf_data import load_data
+from vf_features import feature_names
 import multiprocessing as mp
 
 
@@ -23,8 +24,6 @@ def main():
     # stability feature selection using randomized logistic regression
     estimator = linear_model.RandomizedLogisticRegression(n_resampling=500, verbose=True)
     estimator.fit(x_data, y_data)
-
-    feature_names = ("TCSC", "TCI", "STE", "MEA", "PSR", "VF", "SPEC", "LZ", "SpEn")
 
     print("feature scores (stability selection):")
     for name, score in zip(feature_names, estimator.scores_):
