@@ -262,7 +262,7 @@ def load_data(n_jobs):
                 y_data.append(label)
                 # store mapping of feature and the segment it's built from
                 x_info.append((record, begin_time))
-                print("feature", len(x_data), ":", record, begin_time, feature, label)
+                print( len(x_data), record, begin_time, feature, label)
             except Exception:
                 break
         x_data = np.array(x_data)
