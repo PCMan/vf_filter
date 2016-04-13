@@ -13,7 +13,7 @@ import multiprocessing as mp
 
 
 N_CV_FOLDS = 10
-ALLOWED_FALSE_POS_RATE = 0.05  # 1 - specificity
+ALLOWED_FALSE_POS_RATE = 0.02  # 1 - specificity
 CLASS_WEIGHT = None  # "balanced"
 
 
@@ -105,7 +105,7 @@ def main():
     false_pos_rate, true_pos_rate, thresholds = metrics.roc_curve(y_test, y_predict_scores)
     # find sensitivity at 95% specificity
     x = np.searchsorted(false_pos_rate, ALLOWED_FALSE_POS_RATE)
-    print("RF: Se when Sp is 95%", true_pos_rate[x] * 100, "%")
+    print("RF: Se when Sp is", 1 - false_pos_rate[x], true_pos_rate[x] * 100, "%")
     '''
     import matplotlib.pyplot as plt
     plt.plot(false_pos_rate, true_pos_rate)
@@ -113,26 +113,6 @@ def main():
     plt.ylabel("Sensitivity")
     plt.show()
     '''
-
-    # SVC with RBF kernel
-    estimator = svm.SVC(shrinking=False, cache_size=2048, verbose=False, probability=True, class_weight=CLASS_WEIGHT)
-    grid = grid_search.RandomizedSearchCV(estimator, {
-                                        "C": np.logspace(-2, 1, 4),
-                                        "gamma": np.logspace(-2, 0, 3)
-                                    },
-                                    scoring=cv_scorer,
-                                    n_jobs=n_jobs, cv=N_CV_FOLDS, verbose=0)
-    grid.fit(x_train, y_train)
-    y_predict = grid.predict(x_test)
-    print("SVC:\n", classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n")
-    output_errors(y_test, y_predict, x_indicies=x_test_idx, filename="svc_errors.txt")
-
-    # prediction with probabilities
-    y_predict_scores = grid.predict_proba(x_test)[:, 1]
-    false_pos_rate, true_pos_rate, thresholds = metrics.roc_curve(y_test, y_predict_scores)
-    x = np.searchsorted(false_pos_rate, ALLOWED_FALSE_POS_RATE)
-    print("SVC: Se when Sp is 95%", true_pos_rate[x] * 100, "%")
-
 
     """
     # AdaBoost decision tree
@@ -169,7 +149,26 @@ def main():
     y_predict_scores = grid.predict_proba(x_test)[:, 1]
     false_pos_rate, true_pos_rate, thresholds = metrics.roc_curve(y_test, y_predict_scores)
     x = np.searchsorted(false_pos_rate, ALLOWED_FALSE_POS_RATE)
-    print("GB: Se when Sp is 95%", true_pos_rate[x] * 100, "%")
+    print("GB: Se when Sp is", 1 - false_pos_rate[x], true_pos_rate[x] * 100, "%")
+
+    # SVC with RBF kernel
+    estimator = svm.SVC(shrinking=False, cache_size=2048, verbose=False, probability=True, class_weight=CLASS_WEIGHT)
+    grid = grid_search.RandomizedSearchCV(estimator, {
+        "C": np.logspace(-2, 1, 4),
+        "gamma": np.logspace(-2, 0, 3)
+    },
+                                          scoring=cv_scorer,
+                                          n_jobs=n_jobs, cv=N_CV_FOLDS, verbose=0)
+    grid.fit(x_train, y_train)
+    y_predict = grid.predict(x_test)
+    print("SVC:\n", classification_report(y_test, y_predict), grid.best_params_, grid.best_score_, "\n")
+    output_errors(y_test, y_predict, x_indicies=x_test_idx, filename="svc_errors.txt")
+
+    # prediction with probabilities
+    y_predict_scores = grid.predict_proba(x_test)[:, 1]
+    false_pos_rate, true_pos_rate, thresholds = metrics.roc_curve(y_test, y_predict_scores)
+    x = np.searchsorted(false_pos_rate, ALLOWED_FALSE_POS_RATE)
+    print("SVC: Se when Sp is", 1 - false_pos_rate[x], true_pos_rate[x] * 100, "%")
 
 
 if __name__ == "__main__":
