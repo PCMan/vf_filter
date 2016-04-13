@@ -14,6 +14,7 @@ import multiprocessing as mp
 
 N_CV_FOLDS = 10
 ALLOWED_FALSE_POS_RATE = 0.05  # 1 - specificity
+CLASS_WEIGHT="balanced"
 
 
 def balanced_error_rate(y_true, y_predict):
@@ -80,7 +81,7 @@ def main():
     # cv_scorer = metrics.make_scorer(metrics.fbeta_score, beta=10.0)
 
     # Logistic regression
-    estimator = linear_model.LogisticRegressionCV(scoring=cv_scorer)
+    estimator = linear_model.LogisticRegressionCV(scoring=cv_scorer, class_weight=CLASS_WEIGHT)
     estimator.fit(x_train, y_train)
     y_predict = estimator.predict(x_test)
     # print "Logistic regression: error:", np.sum(y_predict != y_test) * 100 / len(y_test), "%"
@@ -88,7 +89,7 @@ def main():
     output_errors(y_test, y_predict, x_indicies=x_test_idx, filename="log_reg_errors.txt")
 
     # Random forest
-    estimator = ensemble.RandomForestClassifier()
+    estimator = ensemble.RandomForestClassifier(class_weight=CLASS_WEIGHT)
     grid = grid_search.GridSearchCV(estimator, {
                                         "n_estimators": list(range(10, 110, 10))
                                     },
@@ -114,7 +115,7 @@ def main():
     '''
 
     # SVC with RBF kernel
-    estimator = svm.SVC(shrinking=False, cache_size=2048, verbose=False, probability=True)
+    estimator = svm.SVC(shrinking=False, cache_size=2048, verbose=False, probability=True, class_weight=CLASS_WEIGHT)
     grid = grid_search.RandomizedSearchCV(estimator, {
                                         "C": np.logspace(-2, 1, 4),
                                         "gamma": np.logspace(-2, 1, 4)
