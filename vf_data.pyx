@@ -6,7 +6,8 @@ import scipy.signal
 import os
 from vf_features import extract_features
 import pickle
-import multiprocessing as mp
+from joblib import Parallel, delayed
+from joblib.pool import has_shareable_memory
 from array import array
 
 
@@ -148,8 +149,8 @@ class Record:
         return segments
 
 
-# segment_queue is a multiprocessing.Queue
-def load_all_segments(segment_queue):
+# implement as a generator for ECG segments
+def load_all_segments():
     segments_cache_name = "all_segments.dat"
     segment_duration = 8  # 8 sec per segment
     loaded_from_cache = False
@@ -161,7 +162,9 @@ def load_all_segments(segment_queue):
             while True:
                 segment = pickle.load(cache_file)
                 if segment:
-                    segment_queue.put(segment)
+                    # only do feature extration for segments without artifacts
+                    if not segment.has_artifact:
+                        yield segment
                 else:
                     break
     except Exception:
@@ -194,35 +197,27 @@ def load_all_segments(segment_queue):
                 print("  segments:", (n_vf + n_non_vf), "# of vf segments (label=1):", n_vf)
 
                 for segment in segments:
-                    if segment.has_artifact:  # exclude segments with artifacts
-                        continue
-                    segment_queue.put(segment)
-
                     if cache_file:  # cache the segment
                         pickle.dump(segment, cache_file)
-
+                    if segment.has_artifact:  # exclude segments with artifacts
+                        continue
+                    yield segment
         output.close()
         if cache_file:
+            pickle.dump(None, cache_file)
             cache_file.close()
 
-    segment_queue.put(None)  # mark end of queue
 
-
-def extract_features_job(segment_queue, features_queue):
+def extract_features_job(segment):
     segment_duration = 8  # 8 sec per segment
-    while True:
-        segment = segment_queue.get()
-        if segment is None:
-            segment_queue.put(None)  # propagate the ending signal to other processes
-            features_queue.put(None)  # mark the end of output
-            break
-        # resample to DEFAULT_SAMPLING_RATE as needed
-        signals = segment.signals
-        if segment.sampling_rate != DEFAULT_SAMPLING_RATE:
-            signals = scipy.signal.resample(signals, DEFAULT_SAMPLING_RATE * segment_duration)
-        features = extract_features(signals, DEFAULT_SAMPLING_RATE)
-        label = 1 if segment.has_vf else 0
-        features_queue.put((features, label, segment.record, segment.begin_time))
+    # resample to DEFAULT_SAMPLING_RATE as needed
+    signals = segment.signals
+    if segment.sampling_rate != DEFAULT_SAMPLING_RATE:
+        signals = scipy.signal.resample(signals, DEFAULT_SAMPLING_RATE * segment_duration)
+    features = extract_features(signals, DEFAULT_SAMPLING_RATE)
+    label = 1 if segment.has_vf else 0
+    print(segment.record, segment.begin_time, features, label)
+    return (features, label, segment.record, segment.begin_time)
 
 
 def load_data(n_jobs):
@@ -237,34 +232,17 @@ def load_data(n_jobs):
     except Exception:
         # load segments and perform feature extraction
         # here we use multiprocessing for speed up.
-        segment_queue = mp.Queue()  # input
-        features_queue = mp.Queue()  # output
-
-        # start reader processes (multiprocessing.Pool is too limited, so let's use Queue here)
-        reader_jobs = [mp.Process(target=extract_features_job, args=(segment_queue, features_queue)) for i in range(n_jobs)]
-        for job in reader_jobs:
-            job.start()
-
-        # start feeding data into the segment_queue from another process
-        writer_job = mp.Process(target=load_all_segments, args=(segment_queue, ))
-        writer_job.start()
+        features = Parallel(n_jobs=n_jobs, verbose=1, backend="multiprocessing", max_nbytes=4096)(delayed(extract_features_job)(seg) for seg in load_all_segments())
 
         # receive extracted features from the worker processes
         x_data = []
         y_data = []
-        while True:
-            try:
-                item = features_queue.get()
-                if item is None:
-                    break
-                (feature, label, record, begin_time) = item
-                x_data.append(feature)
-                y_data.append(label)
-                # store mapping of feature and the segment it's built from
-                x_info.append((record, begin_time))
-                print( len(x_data), record, begin_time, feature, label)
-            except Exception:
-                break
+        for item in features:
+            (feature, label, record, begin_time) = item
+            x_data.append(feature)
+            y_data.append(label)
+            # store mapping of feature and the segment it's built from
+            x_info.append((record, begin_time))
         x_data = np.array(x_data)
         y_data = np.array(y_data)
 
