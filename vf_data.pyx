@@ -232,7 +232,7 @@ def load_data(n_jobs):
     except Exception:
         # load segments and perform feature extraction
         # here we use multiprocessing for speed up.
-        features = Parallel(n_jobs=n_jobs, verbose=1, backend="multiprocessing", max_nbytes=4096)(delayed(extract_features_job)(seg) for seg in load_all_segments())
+        features = Parallel(n_jobs=n_jobs, verbose=5, backend="multiprocessing", max_nbytes=4096)(delayed(extract_features_job)(seg) for seg in load_all_segments())
 
         # receive extracted features from the worker processes
         x_data = []

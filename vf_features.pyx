@@ -345,25 +345,14 @@ cdef double vf_leak(samples, double peak_freq):
 # The implementation provided by sampen python package is also slow.
 # here we use sample entropy implemented by PyEEG project, which is a little bit faster.
 # https://github.com/forrestbao/pyeeg
-cdef double sample_entropy(samples, int window_size):
-    cdef int window_begin = 0
-    cdef int window_end = window_size
-    cdef int n_samples = len(samples)
-    results = array("d")
-    cdef double entropy = 0.0
-    while window_end <= n_samples:
-        # Ref: Haiyan Li. 2009 Detecting Ventricular Fibrillation by Fast Algorithm of Dynamic Sample Entropy
-        # N = 1250 , r = 0.2 x SD, m = 2 worked well for the characterization ECG signals.
-        # N = 1250 = 250 Hz x 5 seconds (5-sec window)
-        # spens = sampen.sampen2(samples[window_begin:window_end], mm=2)
-        # i, entropy, stddev = spens[2]  # unpack the result with m=2
-        entropy = pyeeg.samp_entropy(samples[window_begin:window_end], M=2, R=0.2)
-        # if entropy is None:  # it's possible that sampen2() returns None here
-        #     entropy = 0.0
-        window_begin += 360
-        window_end += 360
-        results.append(entropy)
-    return np.mean(results)
+cdef double sample_entropy(samples):
+    # Ref: Haiyan Li. 2009 Detecting Ventricular Fibrillation by Fast Algorithm of Dynamic Sample Entropy
+    # N = 1250 , r = 0.2 x SD, m = 2 worked well for the characterization ECG signals.
+    # N = 1250 = 250 Hz x 5 seconds (5-sec window)
+    spen_samples = samples[-1250:]
+    cdef double sample_sd = np.std(spen_samples)
+    spen = pyeeg.samp_entropy(spen_samples, M=2, R=(0.2 * sample_sd))
+    return spen
 
 
 # Implement the algorithm described in the paper:
@@ -450,7 +439,7 @@ cpdef preprocessing(samples, int sampling_rate, bint plotting=False):
 def extract_features(samples, int sampling_rate):
     features = array("d")
     samples = preprocessing(samples, sampling_rate)
-    n_samples = len(samples)
+    cdef int n_samples = len(samples)
 
     # Time domain/morphology
     # -------------------------------------------------
@@ -469,19 +458,19 @@ def extract_features(samples, int sampling_rate):
     # features.append(np.std(tcis))
 
     # Standard exponential (STE)
-    ste = standard_exponential(samples, sampling_rate)
+    cdef double ste = standard_exponential(samples, sampling_rate)
     features.append(ste)
 
     # Modified exponential (MEA)
-    mea = modified_exponential(samples, sampling_rate)
+    cdef double mea = modified_exponential(samples, sampling_rate)
     features.append(mea)
 
     # phase space reconstruction (PSR)
-    psr = phase_space_reconstruction(samples, sampling_rate)
+    cdef double psr = phase_space_reconstruction(samples, sampling_rate)
     features.append(psr)  # phase space reconstruction (PSR)
 
     # Hilbert transformation + PSR
-    hilb = hilbert_psr(samples, sampling_rate)
+    cdef double hilb = hilbert_psr(samples, sampling_rate)
     features.append(hilb)
 
     # spectral parameters (characteristics of power spectrum)
@@ -507,13 +496,13 @@ def extract_features(samples, int sampling_rate):
     if peak_freq == 0:  # is this correct?
         peak_freq = fft_freq[1]
 
-    jmax = min(20 * peak_freq_idx, 100)
+    cdef int jmax = min(20 * peak_freq_idx, 100)
     # The original paper approximate the amplitude by real + imaginary parts instead.
     amplitudes = np.abs(fft[0:jmax + 1])
-    max_amplitude = np.max(amplitudes)
+    cdef double max_amplitude = np.max(amplitudes)
     # amplitudes whose value is less than 5% of max are set to zero.
     amplitudes[amplitudes < (0.05 * max_amplitude)] = 0
-    spectral_moment = (1 / peak_freq) * np.sum([amplitudes[i] * fft_freq[i] for i in range(0, jmax + 1)]) / np.sum(amplitudes)
+    cdef double spectral_moment = (1 / peak_freq) * np.sum([amplitudes[i] * fft_freq[i] for i in range(0, jmax + 1)]) / np.sum(amplitudes)
     features.append(spectral_moment)
 
     # A1: 0 -> min(20 * peak_freq, 100)
@@ -522,12 +511,11 @@ def extract_features(samples, int sampling_rate):
 
     # complexity parameters
     # -------------------------------------------------
-    lzc = lz_complexity(samples)
+    cdef double lzc = lz_complexity(samples)
     features.append(lzc)
 
     # sample entropy (SpEn)
-    # spen = sample_entropy(samples, 5 * sampling_rate)
-    spen = pyeeg.samp_entropy(samples, M=2, R=0.2)
+    cdef double spen = sample_entropy(samples)
     features.append(spen)
 
     # MAV
