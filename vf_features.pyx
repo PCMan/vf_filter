@@ -2,7 +2,7 @@
 # coding: utf-8
 # This implements common VF related features reported in the literatures.
 # Felipe AA et al. 2014. Detection of Life-Threatening Arrhythmias Using Feature Selection and Support Vector Machines
-import pyximport; pyximport.install()
+import pyximport; pyximport.install()  # use Cython
 import numpy as np
 from scipy.signal import butter, lfilter, hamming
 # import sampen  # calculate sample entropy
@@ -502,4 +502,4 @@ def extract_features(samples, int sampling_rate):
     # mav = mean_absolute_value(samples, sampling_rate)
     # features.append(mav)
 
-    return np.array(features)
+    return features

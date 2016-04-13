@@ -10,7 +10,7 @@ import multiprocessing as mp
 from array import array
 
 
-DEFAULT_SAMPLING_RATE = 360.0
+DEFAULT_SAMPLING_RATE = 250.0
 # dataset_dir = os.path.join(os.path.dirname(__file__), "datasets")
 dataset_dir = "datasets"
 
