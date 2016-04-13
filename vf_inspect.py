@@ -49,10 +49,10 @@ def main():
                     break
                 if show:
                     print("error:", segment.record, ", sample rate:", segment.sampling_rate, ", sample #:", segment.begin_time, ", has Vf:", segment.has_vf)
-                    # plt.plot(segment.signals)
-                    # plt.show()
-                    features = vf_features.extract_features(segment.signals, segment.sampling_rate, plotting=True)
+                    features = vf_features.extract_features(segment.signals, segment.sampling_rate)
                     print(features)
+                    # plot the signals
+                    vf_features.preprocessing(segment.signals, segment.sampling_rate, plotting=True)
     except Exception:
         print(sys.exc_info())
         pass

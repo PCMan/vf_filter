@@ -291,7 +291,7 @@ def find_peak_freq(fft, fft_freq):
 
 
 # the VF leak algorithm
-def vf_leak(samples, peak_freq):
+def vf_leak(samples, float peak_freq):
     # From Computers in Cardiology 2002;29:213−216.
     # This method separates nearly sinusoidal waveforms from the rest.
     # VF is nearly sinusoidal. The idea is to move such signal by half period
@@ -315,7 +315,7 @@ def vf_leak(samples, peak_freq):
 # The implementation provided by sampen python package is also slow.
 # here we use sample entropy implemented by PyEEG project, which is a little bit faster.
 # https://github.com/forrestbao/pyeeg
-def sample_entropy(samples, window_size):
+def sample_entropy(samples, int window_size):
     window_begin = 0
     window_end = window_size
     n_samples = len(samples)
@@ -374,11 +374,8 @@ def lz_complexity(samples):
     return cn / bn
 
 
-# extract features from raw sample points of the original ECG signal
-def extract_features(samples, int sampling_rate, plotting=False):
-    features = []
+def preprocessing(samples, sampling_rate, plotting=False):
     n_samples = len(samples)
-    duration = int(n_samples / sampling_rate)
 
     if plotting:
         f, ax = plt.subplots(5, sharex=True)
@@ -412,6 +409,14 @@ def extract_features(samples, int sampling_rate, plotting=False):
         ax[4].plot(samples)
         plt.plot(samples)
         plt.show()
+    return samples
+
+
+# extract features from raw sample points of the original ECG signal
+def extract_features(samples, int sampling_rate):
+    features = []
+    samples = preprocessing(samples, sampling_rate)
+    n_samples = len(samples)
 
     # Time domain/morphology
     # -------------------------------------------------
