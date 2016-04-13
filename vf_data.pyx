@@ -209,11 +209,15 @@ def load_all_segments():
 
 
 def extract_features_job(segment):
-    cdef double segment_duration = 8  # 8 sec per segment
-    # resample to DEFAULT_SAMPLING_RATE as needed
+    cdef int segment_duration = 8  # 8 sec per segment
     signals = segment.signals
+    # resample to DEFAULT_SAMPLING_RATE as needed
     if segment.sampling_rate != DEFAULT_SAMPLING_RATE:
         signals = scipy.signal.resample(signals, DEFAULT_SAMPLING_RATE * segment_duration)
+
+    cdef int n_samples = len(signals)
+    # TODO: try to use different segment size here? For ex: the last 3 seconds of signals
+    # signals = segment.signals[n_samples - 1 - int(3 * DEFAULT_SAMPLING_RATE):]
     features = extract_features(signals, DEFAULT_SAMPLING_RATE)
     label = 1 if segment.has_vf else 0
     print(segment.record, segment.begin_time, features, label)

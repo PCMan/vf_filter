@@ -20,7 +20,7 @@ cdef threshold_crossing_count(samples, double threshold_ratio=0.2):
     cdef bint higher = samples[0] >= threshold
     cdef int first_cross = -1
     cdef int last_cross = -1
-    cdef double sample = 0.0
+    cdef double sample
     for i in range(1, len(samples)):
         sample = samples[i]
         if higher:
@@ -43,8 +43,8 @@ cdef threshold_crossing_count(samples, double threshold_ratio=0.2):
     return n_cross, first_cross, last_cross
 
 
-cdef tcsc_cosine_window(double duration, int sampling_rate):
-    cdef int window_size = int(duration * sampling_rate)
+cdef tcsc_cosine_window(int window_size, int sampling_rate):
+    cdef double duration = float(window_size) / sampling_rate
 
     t = np.linspace(0, 0.25, num=0.25 * sampling_rate)
     left = 0.5 * (1.0 - np.cos(4 * np.pi * t))
@@ -60,7 +60,7 @@ cdef tcsc_cosine_window(double duration, int sampling_rate):
 # TCSC feature
 # Muhammad Abdullah Arafat et al. 2011. A simple time domain algorithm for the detection of
 # ventricular fibrillation in electrocardiogram.
-cdef threshold_crossing_sample_counts(samples, int n_samples, int sampling_rate, double window_duration=3.0, double threshold_ratio=0.2):
+cdef threshold_crossing_sample_counts(samples, int sampling_rate, double window_duration=3.0, double threshold_ratio=0.2):
     # steps:
     # 1. multiply the samples by a cosine window
     #  w(t) = 1/2(1-cos(4*pi*t)), if 0 <= t <= 1/4 or Ls-1/4 <= t <= Ls
@@ -70,16 +70,20 @@ cdef threshold_crossing_sample_counts(samples, int n_samples, int sampling_rate,
     # 4. calculate the samples that cross V0 (number of 1s in the binary sequence)
     #    N = <# of samples that cross V0> / <# of samples> * 100
     # 5. average all Ls-2 N values
+    cdef int n_samples = len(samples)
     cdef int window_size = int(window_duration * sampling_rate)
     cdef int window_begin = 0
     cdef int window_end = window_size
+    if window_end > n_samples:
+        window_end = window_size = n_samples
+
     tcsc = array("d")
     cdef double n = 0
     while window_end <= n_samples:
         # moving window
         window = samples[window_begin:window_end]
         # multiply by a cosine window
-        window *= tcsc_cosine_window(window_duration, sampling_rate)
+        window *= tcsc_cosine_window(window_size, sampling_rate)
         # use absolute values for analysis
         window = np.abs(window)
         # normalize by max
@@ -95,11 +99,16 @@ cdef threshold_crossing_sample_counts(samples, int n_samples, int sampling_rate,
 
 
 # average threshold crossing interval
-cdef threshold_crossing_intervals(samples, int n_samples, int sampling_rate, double threshold_ratio=0.2):
+cdef threshold_crossing_intervals(samples, int sampling_rate, double threshold_ratio=0.2):
+    cdef int n_samples = len(samples)
     cdef int window_size = int(sampling_rate)  # calculate 1 TCI value per second
     cdef int window_begin = 0
     cdef int window_end = window_size
+    if window_end > n_samples:
+        window_end = window_size = n_samples
+
     results = []
+    cdef int n_cross, first_cross, last_cross
     while window_end <= n_samples:
         window = samples[window_begin:window_end]
         n_cross, first_cross, last_cross = threshold_crossing_count(window, threshold_ratio)
@@ -110,14 +119,22 @@ cdef threshold_crossing_intervals(samples, int n_samples, int sampling_rate, dou
     # TCI is calculated for every 1 second sub segment, but for each TCI,
     # we also requires some values from its previous and later segments
     tcis = array("d")
-    for i in range(1, len(results) - 1):
+    cdef int first_result = 1
+    cdef int last_result = len(results) - 1
+
+    if len(results) < 3:  # special handling for less than 3 results
+        first_result = 0
+        last_result = 2
+
+    cdef double n, t1, t2, t3, t4, divider, tci
+    for i in range(first_result, last_result):
         n, t2, t3 = results[i]
-        t1 = results[i - 1][1]   # last cross of the previous 1-s segment
-        t4 = results[i + 1][2]  # first cross of the next 1-s segment
+        t1 = results[i - 1][1] if i >= 1 else 0  # last cross of the previous 1-s segment
+        t4 = results[i + 1][2] if (i + 1) < len(results) else 0  # first cross of the next 1-s segment
         if n == 0:
             tci = 1000
         else:
-            divider = (n - 1 + t2/(t1 + t2) + t3/(t3 + t4))
+            divider = (n - 1 + t2 / (t1 + t2) + t3 / (t3 + t4))
             tci = 1000 / divider
         tcis.append(tci)
     # print "  TCIs:", tcis
@@ -138,6 +155,7 @@ cdef double standard_exponential(samples, int sampling_rate, int time_constant=3
     # calculate intersections n of this curve with the ECG signal
     cdef double n_crosses = 0.0
     cdef bint higher = True if samples[0] > max_amplitude * np.exp(-np.abs(0 - max_time) / time_constant) else False
+    cdef double threshold, sample
     for t in range(1, len(samples) - 1):
         threshold = max_amplitude * np.exp(-np.abs(t - max_time) / time_constant)
         sample = samples[t]
@@ -179,6 +197,7 @@ cdef double modified_exponential(samples, int sampling_rate, double peak_thresho
     cdef int max_time = find_first_local_maximum(samples, start=0, threshold=peak_threshold)
     cdef int t = max_time + 1
     # exp_value = list(samples[0:t])
+    cdef double local_max, et
     while t < n_samples:
         sample = samples[t]
         # calculate the exponential value
@@ -242,8 +261,8 @@ cdef double phase_space_reconstruction(samples, int sampling_rate, double delay=
 
     x_samples = samples[0:n_samples - n_delay]
     y_samples = samples[n_delay:n_samples]
-    offset = np.min(samples)
-    axis_range = np.max(samples) - offset
+    cdef double offset = np.min(samples)
+    cdef double axis_range = np.max(samples) - offset
 
     # convert X and Y values to indices of the 40 x 40 grid
     grid_x = ((x_samples - offset) * 39.0 / axis_range).astype("int")
@@ -302,7 +321,7 @@ cdef butter_lowpass_filter(data, double highcut, double fs, int order=5):
     return y
 
 
-def moving_average(samples, int order=5):
+cdef moving_average(samples, int order=5):
     # https://www.otexts.org/fpp/6/2
     cdef int n_samples = len(samples)
     ma = np.zeros(n_samples - order + 1)
@@ -329,7 +348,7 @@ cdef double vf_leak(samples, double peak_freq):
     # calculate VF leaks
     # find the central/peak frequency
     # http://cinc.mit.edu/archives/2002/pdf/213.pdf
-    cdef double cycle = 0.0
+    cdef double cycle
     if peak_freq != 0:
         cycle = (1.0 / peak_freq)  # in terms of samples
     else:
@@ -351,7 +370,7 @@ cdef double sample_entropy(samples):
     # N = 1250 = 250 Hz x 5 seconds (5-sec window)
     spen_samples = samples[-1250:]
     cdef double sample_sd = np.std(spen_samples)
-    spen = pyeeg.samp_entropy(spen_samples, M=2, R=(0.2 * sample_sd))
+    cdef double spen = pyeeg.samp_entropy(spen_samples, M=2, R=(0.2 * sample_sd))
     return spen
 
 
@@ -448,12 +467,12 @@ def extract_features(samples, int sampling_rate):
     # get all crossing points, use 20% of maximum as threshold
     # calculate average TCSC using a 3-s window
     # using 3-s moving window
-    tcsc = threshold_crossing_sample_counts(samples, len(samples), sampling_rate=sampling_rate, window_duration=3.0, threshold_ratio=0.2)
+    tcsc = threshold_crossing_sample_counts(samples, sampling_rate=sampling_rate, window_duration=3.0, threshold_ratio=0.2)
     features.append(np.mean(tcsc))
     # features.append(np.std(tcsc))
 
     # average TCI for every 1-second segments
-    tcis = threshold_crossing_intervals(samples, len(samples), sampling_rate=sampling_rate, threshold_ratio=0.2)
+    tcis = threshold_crossing_intervals(samples, sampling_rate=sampling_rate, threshold_ratio=0.2)
     features.append(np.mean(tcis))
     # features.append(np.std(tcis))
 
