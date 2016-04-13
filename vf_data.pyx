@@ -7,6 +7,7 @@ import os
 from vf_features import extract_features
 import pickle
 import multiprocessing as mp
+from array import array
 
 
 DEFAULT_SAMPLING_RATE = 360.0
@@ -44,7 +45,7 @@ class Annotation:
 
 class Record:
     def __init__(self):
-        self.signals = []
+        self.signals = array("I")  # unsigned int
         self.annotations = []
         self.name = ""
         self.sampling_rate = 0
@@ -56,9 +57,7 @@ class Record:
         record_filename = os.path.join(dataset_dir, db_name, record)
         with open(record_filename, "rb") as f:
             self.sampling_rate = pickle.load(f)
-
-            # read signals and convert to float ndarray
-            self.signals = np.array(pickle.load(f), dtype="float64")
+            self.signals = pickle.load(f)
 
             # read annotations
             annotations = []

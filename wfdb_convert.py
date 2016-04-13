@@ -5,6 +5,8 @@ import sys
 import os
 from ctypes import *
 import wfdb
+from array import array
+
 
 # get name of records from a database
 def get_records(db_name):
@@ -38,7 +40,7 @@ def main():
             # read the signals
             sigInfo = (wfdb.WFDB_Siginfo * n_channels)()
             sample_buf = (wfdb.WFDB_Sample * n_channels)()
-            signals = []
+            signals = array("i")  # signed int
             if wfdb.isigopen(record_name, byref(sigInfo), n_channels) == n_channels:
                 while wfdb.getvec(byref(sample_buf)) > 0:
                     sample = sample_buf[0]  # we only want the first channel
