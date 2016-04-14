@@ -83,8 +83,8 @@ def main():
     x_data, y_data, x_info = load_data(n_jobs)
     print("Summary:\n", "# of segments:", len(x_data), "# of VT/Vf:", np.sum(y_data), len(x_info))
 
-    # normalize the features
-    preprocessing.normalize(x_data)
+    # scale the features
+    preprocessing.scale(x_data, copy=False)
     x_indicies = list(range(0, len(x_data)))
 
     # build estimators to test
