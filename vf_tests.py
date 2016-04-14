@@ -50,7 +50,7 @@ def main():
     # parse command line arguments
     parser = argparse.ArgumentParser()
     # known estimators
-    estimator_names = ("logistic_regression", "random_forest", "gradiant_boosting", "svc")
+    estimator_names = ("logistic_regression", "random_forest", "gradient_boosting", "svc")
     parser.add_argument("-m", "--model", type=str, required=True, choices=estimator_names)
     parser.add_argument("-o", "--output", type=str, required=True)
     parser.add_argument("-j", "--jobs", type=int, default=-1)
