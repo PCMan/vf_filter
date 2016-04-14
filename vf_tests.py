@@ -11,11 +11,9 @@ from sklearn import grid_search
 from vf_data import load_data
 import multiprocessing as mp
 import csv
-import os
+import argparse
 
 
-N_TEST_ITERS = 100
-N_CV_FOLDS = 10
 CLASS_WEIGHT = None  # "balanced"
 
 
@@ -49,8 +47,37 @@ class ClassificationResult:
 
 
 def main():
-    n_jobs = (mp.cpu_count() - 1) if mp.cpu_count() > 1 else 1
-    output_dir = "reports"
+    # parse command line arguments
+    parser = argparse.ArgumentParser()
+    # known estimators
+    estimator_names = ("logistic_regression", "random_forest", "gradiant_boosting", "svc")
+    parser.add_argument("-m", "--model", type=str, required=True, choices=estimator_names)
+    parser.add_argument("-o", "--output", type=str, required=True)
+    parser.add_argument("-j", "--jobs", type=int, default=-1)
+    parser.add_argument("-t", "--iter", type=int, default=1)
+    parser.add_argument("-s", "--scorer", type=str, choices=("ber", "f1", "accuracy"), default="ber")
+    parser.add_argument("-f", "--fold", type=int, default=10)  # 10 fold CV by default
+    parser.add_argument("-p", "--test-percent", type=int, default=30)  # 30% test set size
+    args = parser.parse_args()
+
+    # setup testing parameters
+    n_jobs = args.jobs
+    if n_jobs == -1 or n_jobs > mp.cpu_count():
+        n_jobs = (mp.cpu_count() - 1) if mp.cpu_count() > 1 else 1
+
+    print(args)
+    n_test_iters = args.iter
+    n_cv_folds = args.fold
+    test_size = args.test_percent / 100
+    if test_size > 1:
+        test_size = 0.3
+
+    # build scoring function
+    if args.scorer == "ber":  # BER-based scoring function
+        cv_scorer = metrics.make_scorer(balanced_error_rate, greater_is_better=False)
+    else:
+        cv_scorer = args.scorer
+        # cv_scorer = metrics.make_scorer(metrics.fbeta_score, beta=10.0)
 
     # load features
     x_data, y_data, x_info = load_data(n_jobs)
@@ -60,90 +87,97 @@ def main():
     preprocessing.normalize(x_data)
     x_indicies = list(range(0, len(x_data)))
 
-    # BER-based scoring function
-    cv_scorer = metrics.make_scorer(balanced_error_rate, greater_is_better=False)
-    # cv_scorer = "f1"
-    # cv_scorer = "accuracy"
-    # cv_scorer = metrics.make_scorer(metrics.fbeta_score, beta=10.0)
-
     # build estimators to test
-    estimators = []
-    # Logistic regression
-    estimator = linear_model.LogisticRegressionCV(scoring=cv_scorer, class_weight=CLASS_WEIGHT)
-    estimators.append(("Logistic Regression", estimator))
+    estimator_name = args.model
+    model = None
+    param_names = []
+    if estimator_name == "logistic_regression":
+        model = linear_model.LogisticRegressionCV(scoring=cv_scorer,
+                                                              n_jobs=n_jobs,
+                                                              cv=n_cv_folds,
+                                                              class_weight=CLASS_WEIGHT)
+    elif estimator_name == "random_forest":
+        estimator = ensemble.RandomForestClassifier(class_weight=CLASS_WEIGHT)
+        param_grid = {
+            "n_estimators": list(range(10, 110, 10))
+        }
+        model = grid_search.GridSearchCV(estimator, param_grid,
+                                        scoring=cv_scorer,
+                                        n_jobs=n_jobs, cv=n_cv_folds, verbose=0)
+        param_names = param_grid.keys()
+    elif estimator_name == "gradient_boosting":
+        estimator = ensemble.GradientBoostingClassifier(learning_rate=0.1)
+        param_grid = {
+            "n_estimators": list(range(150, 250, 10)),
+            "max_depth": list(range(3, 8))
+        }
+        model = grid_search.GridSearchCV(estimator, param_grid,
+                                        scoring=cv_scorer,
+                                        n_jobs=n_jobs, cv=n_cv_folds, verbose=0)
+        param_names = param_grid.keys()
+    elif estimator_name == "svc":
+        estimator = svm.SVC(shrinking=False, cache_size=2048, verbose=False, probability=True, class_weight=CLASS_WEIGHT)
+        param_grid = {
+            "C": np.logspace(-2, 1, 4),
+            "gamma": np.logspace(-2, 0, 3)
+        }
+        model = grid_search.RandomizedSearchCV(estimator, param_grid,
+                                              scoring=cv_scorer,
+                                              n_jobs=n_jobs, cv=n_cv_folds, verbose=0)
+        param_names = param_grid.keys()
+    else:
+        print("unknown estimator")
+        return
 
-    # Random forest
-    estimator = ensemble.RandomForestClassifier(class_weight=CLASS_WEIGHT)
-    grid = grid_search.GridSearchCV(estimator, {
-                                        "n_estimators": list(range(10, 110, 10))
-                                    },
-                                    scoring=cv_scorer,
-                                    n_jobs=n_jobs, cv=N_CV_FOLDS, verbose=0)
-    estimators.append(("Random Forest", grid))
+    # Run the selected test
+    csv_fields = ["se", "sp", "ppv", "acc", "se(sp95)", "se(sp99)", "tp", "tn", "fp", "fn"]
+    csv_fields.extend(param_names)
+    with open(args.output, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=csv_fields)
+        writer.writeheader()
+        # perform the test for many times
+        for iter in range(n_test_iters):
+            print(estimator_name, iter)
+            row = {}
+            # Here we split the indicies of the rows rather than the data array itself.
+            x_train_idx, x_test_idx, y_train, y_test = cross_validation.train_test_split(x_indicies,
+                                                                                         y_data,
+                                                                                         test_size=test_size,
+                                                                                         stratify=y_data)
+            x_train = x_data[x_train_idx]
+            x_test = x_data[x_test_idx]
+            x_test_info = x_info[x_test_idx]
 
-    # Gradient boosting
-    estimator = ensemble.GradientBoostingClassifier(learning_rate=0.1)
-    grid = grid_search.GridSearchCV(estimator, {
-                                        "n_estimators": list(range(150, 250, 10)),
-                                        "max_depth": list(range(3, 8))
-                                    },
-                                    scoring=cv_scorer,
-                                    n_jobs=n_jobs, cv=N_CV_FOLDS, verbose=0)
-    estimators.append(("Gradient Boosting", grid))
+            # perform the classification test
+            model.fit(x_train, y_train)
+            y_predict = model.predict(x_test)
+            result = ClassificationResult(y_test, y_predict)
+            row["se"] = result.sensitivity
+            row["sp"] = result.specificity
+            row["ppv"] = result.precision
+            row["acc"] = result.accuracy
+            row["tp"] = result.tp
+            row["tn"] = result.tn
+            row["fp"] = result.fp
+            row["fn"] = result.fn
 
-    # SVC with RBF kernel
-    estimator = svm.SVC(shrinking=False, cache_size=2048, verbose=False, probability=True, class_weight=CLASS_WEIGHT)
-    grid = grid_search.RandomizedSearchCV(estimator, {
-                                            "C": np.logspace(-2, 1, 4),
-                                            "gamma": np.logspace(-2, 0, 3)
-                                          },
-                                          scoring=cv_scorer,
-                                          n_jobs=n_jobs, cv=N_CV_FOLDS, verbose=0)
-    estimators.append(("SVM", grid))
+            # prediction with probabilities
+            if hasattr(model, "predict_proba"):
+                y_predict_scores = model.predict_proba(x_test)[:, 1]
+                false_pos_rate, true_pos_rate, thresholds = metrics.roc_curve(y_test, y_predict_scores)
+                # find sensitivity at 95% specificity
+                x = np.searchsorted(false_pos_rate, 0.05)
+                row["se(sp95)"] = true_pos_rate[x]
 
-    os.makedirs(output_dir, exist_ok=True)
-    csv_fields = ("se", "sp", "ppv", "acc", "sp95", "sp99", "tp", "tn", "fp", "fn")
-    for name, estimator in estimators:
-        file_path = os.path.join(output_dir, "{0}_tests.csv".format(name))
-        with open(file_path, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=csv_fields)
-            writer.writeheader()
-            # perform the test for many times
-            for iter in range(N_TEST_ITERS):
-                print(name, iter)
-                row = {}
-                # Here we split the indicies of the rows rather than the data array itself.
-                x_train_idx, x_test_idx, y_train, y_test = cross_validation.train_test_split(x_indicies, y_data, test_size=0.3, stratify=y_data)
-                x_train = x_data[x_train_idx]
-                x_test = x_data[x_test_idx]
-                x_test_info = x_info[x_test_idx]
+                x = np.searchsorted(false_pos_rate, 0.01)
+                row["se(sp99)"] = true_pos_rate[x]
 
-                # perform the classification test
-                estimator.fit(x_train, y_train)
-                y_predict = estimator.predict(x_test)
-                result = ClassificationResult(y_test, y_predict)
-                row["se"] = result.sensitivity
-                row["sp"] = result.specificity
-                row["ppv"] = result.precision
-                row["acc"] = result.accuracy
-                row["tp"] = result.tp
-                row["tn"] = result.tn
-                row["fp"] = result.fp
-                row["fn"] = result.fn
+            # best parameters of grid search
+            if hasattr(model, "best_params_"):
+                row.update(model.best_params_)
 
-                # prediction with probabilities
-                if hasattr(estimator, "predict_proba"):
-                    y_predict_scores = estimator.predict_proba(x_test)[:, 1]
-                    false_pos_rate, true_pos_rate, thresholds = metrics.roc_curve(y_test, y_predict_scores)
-                    # find sensitivity at 95% specificity
-                    x = np.searchsorted(false_pos_rate, 0.05)
-                    row["sp95"] = true_pos_rate[x]
-
-                    x = np.searchsorted(false_pos_rate, 0.01)
-                    row["sp99"] = true_pos_rate[x]
-
-                print("  ", row)
-                writer.writerow(row)
+            print("  ", row)
+            writer.writerow(row)
 
 
 if __name__ == "__main__":
