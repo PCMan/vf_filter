@@ -53,7 +53,7 @@ def main():
         score = np.mean(scores)
         print(name, ":", score)
     print("")
-    
+
 
 if __name__ == "__main__":
     main()

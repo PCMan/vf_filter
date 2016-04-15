@@ -23,9 +23,9 @@ class ClassificationResult:
         fp = np.sum(np.logical_and(y_predict, incorrect))
         tn = np.sum(np.logical_and(pred_negative, correct))
         fn = np.sum(np.logical_and(pred_negative, incorrect))
-        self.sensitivity = tp / (tp + fn)
-        self.specificity = tn / (tn + fp)
-        self.precision = tp / (tp + fp)
+        self.sensitivity = 0.0 if tp == 0 else tp / (tp + fn)
+        self.specificity = 0.0 if tn == 0 else tn / (tn + fp)
+        self.precision = 0.0 if tp == 0 else tp / (tp + fp)
         self.accuracy = (tp + tn) / len(y_true)
         self.tp = tp
         self.tn = tn
