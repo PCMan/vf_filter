@@ -70,9 +70,9 @@ def main():
     param_names = []
     if estimator_name == "logistic_regression":
         model = linear_model.LogisticRegressionCV(scoring=cv_scorer,
-                                                              n_jobs=n_jobs,
-                                                              cv=n_cv_folds,
-                                                              class_weight=class_weight)
+                                                  n_jobs=n_jobs,
+                                                  cv=n_cv_folds,
+                                                  class_weight=class_weight)
     elif estimator_name == "random_forest":
         estimator = ensemble.RandomForestClassifier(class_weight=class_weight)
         param_grid = {
@@ -93,14 +93,20 @@ def main():
                                         n_jobs=n_jobs, cv=n_cv_folds, verbose=0)
         param_names = param_grid.keys()
     elif estimator_name == "svc":
-        estimator = svm.SVC(shrinking=False, cache_size=2048, verbose=False, probability=True, class_weight=class_weight)
+        estimator = svm.SVC(shrinking=False,
+                            cache_size=2048,
+                            verbose=False,
+                            probability=True,
+                            class_weight=class_weight)
         param_grid = {
             "C": np.logspace(-1, 1, 3),
             "gamma": np.logspace(-3, -1, 3)
         }
         model = grid_search.GridSearchCV(estimator, param_grid,
-                                              scoring=cv_scorer,
-                                              n_jobs=n_jobs, cv=n_cv_folds, verbose=0)
+                                         scoring=cv_scorer,
+                                         n_jobs=n_jobs,
+                                         cv=n_cv_folds,
+                                         verbose=0)
         param_names = param_grid.keys()
     else:
         print("unknown estimator")
