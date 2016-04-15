@@ -14,9 +14,6 @@ import csv
 import argparse
 
 
-CLASS_WEIGHT = None  # "balanced"
-
-
 def balanced_error_rate(y_true, y_predict):
     incorrect = (y_true != y_predict)
     fp = np.sum(np.logical_and(y_predict, incorrect))
@@ -55,9 +52,10 @@ def main():
     parser.add_argument("-o", "--output", type=str, required=True)
     parser.add_argument("-j", "--jobs", type=int, default=-1)
     parser.add_argument("-t", "--iter", type=int, default=1)
-    parser.add_argument("-s", "--scorer", type=str, choices=("ber", "f1", "accuracy"), default="ber")
+    parser.add_argument("-s", "--scorer", type=str, choices=("ber", "f1", "accuracy", "precision"), default="ber")
     parser.add_argument("-f", "--fold", type=int, default=10)  # 10 fold CV by default
     parser.add_argument("-p", "--test-percent", type=int, default=30)  # 30% test set size
+    parser.add_argument("-b", "--balanced-weight", action="store_true")  # used balanced class weighting
     args = parser.parse_args()
 
     # setup testing parameters
@@ -71,6 +69,7 @@ def main():
     test_size = args.test_percent / 100
     if test_size > 1:
         test_size = 0.3
+    class_weight = "balanced" if args.balanced_weight else None
 
     # build scoring function
     if args.scorer == "ber":  # BER-based scoring function
@@ -95,9 +94,9 @@ def main():
         model = linear_model.LogisticRegressionCV(scoring=cv_scorer,
                                                               n_jobs=n_jobs,
                                                               cv=n_cv_folds,
-                                                              class_weight=CLASS_WEIGHT)
+                                                              class_weight=class_weight)
     elif estimator_name == "random_forest":
-        estimator = ensemble.RandomForestClassifier(class_weight=CLASS_WEIGHT)
+        estimator = ensemble.RandomForestClassifier(class_weight=class_weight)
         param_grid = {
             "n_estimators": list(range(10, 110, 10))
         }
@@ -116,7 +115,7 @@ def main():
                                         n_jobs=n_jobs, cv=n_cv_folds, verbose=0)
         param_names = param_grid.keys()
     elif estimator_name == "svc":
-        estimator = svm.SVC(shrinking=False, cache_size=2048, verbose=False, probability=True, class_weight=CLASS_WEIGHT)
+        estimator = svm.SVC(shrinking=False, cache_size=2048, verbose=False, probability=True, class_weight=class_weight)
         param_grid = {
             "C": np.logspace(-2, 1, 4),
             "gamma": np.logspace(-2, 0, 3)
@@ -131,7 +130,7 @@ def main():
 
     # Run the selected test
     csv_fields = ["se", "sp", "ppv", "acc", "se(sp95)", "se(sp99)", "tp", "tn", "fp", "fn"]
-    csv_fields.extend(param_names)
+    csv_fields.extend(sorted(param_names))
     with open(args.output, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=csv_fields)
         writer.writeheader()
