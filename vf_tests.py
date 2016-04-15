@@ -25,9 +25,10 @@ def main():
     parser.add_argument("-j", "--jobs", type=int, default=-1)
     parser.add_argument("-t", "--iter", type=int, default=1)
     parser.add_argument("-s", "--scorer", type=str, choices=("ber", "f1", "accuracy", "precision"), default="ber")
-    parser.add_argument("-f", "--fold", type=int, default=10)  # 10 fold CV by default
+    parser.add_argument("-c", "--cv-fold", type=int, default=10)  # 10 fold CV by default
     parser.add_argument("-p", "--test-percent", type=int, default=30)  # 30% test set size
     parser.add_argument("-b", "--balanced-weight", action="store_true")  # used balanced class weighting
+    parser.add_argument("-f", "--features", type=int, nargs="+")  # feature selection
     args = parser.parse_args()
 
     # setup testing parameters
@@ -37,11 +38,12 @@ def main():
 
     print(args)
     n_test_iters = args.iter
-    n_cv_folds = args.fold
+    n_cv_folds = args.cv_fold
     test_size = args.test_percent / 100
     if test_size > 1:
         test_size = 0.3
     class_weight = "balanced" if args.balanced_weight else None
+    selected_features = args.features
 
     # build scoring function
     if args.scorer == "ber":  # BER-based scoring function
@@ -53,6 +55,10 @@ def main():
     # load features
     x_data, y_data, x_info = load_data(n_jobs)
     print("Summary:\n", "# of segments:", len(x_data), "# of VT/Vf:", np.sum(y_data), len(x_info))
+
+    # only select the specified feature
+    if selected_features:
+        x_data = x_data[:, selected_features]
 
     # scale the features
     preprocessing.scale(x_data, copy=False)
