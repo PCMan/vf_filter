@@ -1,4 +1,5 @@
 #!/bin/sh
-for i in 0 1 2 3 4 5 6 7 8 9; do
-    ./vf_tests.py --model svc --output /dev/null  --cv-fold 10 --features $i
+mkdir -p univariate_svm
+for i in $*; do
+    ./vf_tests.py --model svc --output "univariate_svm/feature_$i.csv" -t100 --cv-fold 10 --features $i
 done
