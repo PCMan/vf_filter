@@ -53,17 +53,7 @@ def main():
         score = np.mean(scores)
         print(name, ":", score)
     print("")
-
-    estimator = svm.SVC(C=1.0, gamma=0.01, cache_size=1024)
-    print("SVC for each feature:")
-    for i, name in enumerate(feature_names):
-        scores = cross_validation.cross_val_score(estimator,
-                                                  x_data[:, i:i + 1], y_data,
-                                                  scoring="accuracy",
-                                                  n_jobs=N_JOBS,
-                                                  cv=5)
-        score = np.mean(scores)
-        print(name, ":", score)
+    
 
 if __name__ == "__main__":
     main()

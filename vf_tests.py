@@ -95,10 +95,10 @@ def main():
     elif estimator_name == "svc":
         estimator = svm.SVC(shrinking=False, cache_size=2048, verbose=False, probability=True, class_weight=class_weight)
         param_grid = {
-            "C": np.logspace(-2, 1, 4),
-            "gamma": np.logspace(-2, 0, 3)
+            "C": np.logspace(-1, 1, 3),
+            "gamma": np.logspace(-3, -1, 3)
         }
-        model = grid_search.RandomizedSearchCV(estimator, param_grid,
+        model = grid_search.GridSearchCV(estimator, param_grid,
                                               scoring=cv_scorer,
                                               n_jobs=n_jobs, cv=n_cv_folds, verbose=0)
         param_names = param_grid.keys()
