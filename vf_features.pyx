@@ -4,13 +4,13 @@
 # Felipe AA et al. 2014. Detection of Life-Threatening Arrhythmias Using Feature Selection and Support Vector Machines
 import pyximport; pyximport.install()  # use Cython
 import numpy as np
-from scipy.signal import butter, lfilter, hamming, resample, hilbert
+import scipy.signal as signal
 import pyeeg  # calculate sample entropy
 import matplotlib.pyplot as plt
 from array import array  # python array with static types
 
 
-feature_names = ("TCSC", "TCI", "STE", "MEA", "PSR", "HILB", "VF", "SPEC", "LZ", "SpEn")
+feature_names = ("TCSC", "TCI", "STE", "MEA", "PSR", "HILB", "VF", "SPEC", "LZ", "SpEn", "MAV")
 
 # time domain/morphology
 
@@ -43,24 +43,11 @@ cdef threshold_crossing_count(samples, double threshold_ratio=0.2):
     return n_cross, first_cross, last_cross
 
 
-cdef tcsc_cosine_window(int window_size, int sampling_rate):
-    cdef double duration = float(window_size) / sampling_rate
-
-    t = np.linspace(0, 0.25, num=0.25 * sampling_rate)
-    left = 0.5 * (1.0 - np.cos(4 * np.pi * t))
-
-    t = np.linspace(duration - 0.25, duration, num=0.25 * sampling_rate)
-    right = 0.5 * (1.0 - np.cos(4 * np.pi * t))
-
-    middle = np.ones(window_size - len(left) - len(right))
-    return np.concatenate((left, middle, right))
-
-
 # average threshold crossing count
 # TCSC feature
 # Muhammad Abdullah Arafat et al. 2011. A simple time domain algorithm for the detection of
 # ventricular fibrillation in electrocardiogram.
-cdef threshold_crossing_sample_counts(samples, int sampling_rate, double window_duration=3.0, double threshold_ratio=0.2):
+cdef double threshold_crossing_sample_counts(samples, int sampling_rate, double window_duration=3.0, double threshold_ratio=0.2):
     # steps:
     # 1. multiply the samples by a cosine window
     #  w(t) = 1/2(1-cos(4*pi*t)), if 0 <= t <= 1/4 or Ls-1/4 <= t <= Ls
@@ -82,8 +69,11 @@ cdef threshold_crossing_sample_counts(samples, int sampling_rate, double window_
     while window_end <= n_samples:
         # moving window
         window = samples[window_begin:window_end]
-        # multiply by a cosine window
-        window *= tcsc_cosine_window(window_size, sampling_rate)
+
+        # multiply by a cosine window (Tukey window)
+        # window *= tcsc_cosine_window(window_size, sampling_rate)
+        window *= signal.tukey(window_size)
+
         # use absolute values for analysis
         window = np.abs(window)
         # normalize by max
@@ -95,11 +85,11 @@ cdef threshold_crossing_sample_counts(samples, int sampling_rate, double window_
         window_end += sampling_rate
     # calculate average of all windows
     # print "  TCSC:", tcsc
-    return tcsc
+    return np.mean(tcsc)
 
 
 # average threshold crossing interval
-cdef threshold_crossing_intervals(samples, int sampling_rate, double threshold_ratio=0.2):
+cdef double threshold_crossing_intervals(samples, int sampling_rate, double threshold_ratio=0.2):
     cdef int n_samples = len(samples)
     cdef int window_size = int(sampling_rate)  # calculate 1 TCI value per second
     cdef int window_begin = 0
@@ -138,7 +128,7 @@ cdef threshold_crossing_intervals(samples, int sampling_rate, double threshold_r
             tci = 1000 / divider
         tcis.append(tci)
     # print "  TCIs:", tcis
-    return tcis
+    return np.mean(tcis)
 
 
 cdef double standard_exponential(samples, int sampling_rate, int time_constant=3):
@@ -283,8 +273,8 @@ cdef double hilbert_psr(samples, int sampling_rate):
     cdef int n_samples = int(duration * 50)
 
     # phase space plotting (40 x 40 grid)
-    x_samples = resample(samples, n_samples)
-    analytical_signals = hilbert(x_samples)
+    x_samples = signal.resample(samples, n_samples)
+    analytical_signals = signal.hilbert(x_samples)
     y_samples = np.imag(analytical_signals)  # the imaginary part of the analytical signal is the Hilbert transform of X(t)
 
     cdef double x_offset = np.min(x_samples)
@@ -308,16 +298,16 @@ cdef butter_bandpass_filter(data, double lowcut, double highcut, double fs, int 
     cdef double nyq = 0.5 * fs
     cdef double low = lowcut / nyq
     cdef double high = highcut / nyq
-    b, a = butter(order, [low, high], btype='band')
-    y = lfilter(b, a, data)
+    b, a = signal.butter(order, [low, high], btype='band')
+    y = signal.lfilter(b, a, data)
     return y
 
 
 cdef butter_lowpass_filter(data, double highcut, double fs, int order=5):
     cdef double nyq = 0.5 * fs
     cdef double high = highcut / nyq
-    b, a = butter(order, high, btype='low')
-    y = lfilter(b, a, data)
+    b, a = signal.butter(order, high, btype='low')
+    y = signal.lfilter(b, a, data)
     return y
 
 
@@ -468,13 +458,11 @@ def extract_features(samples, int sampling_rate):
     # calculate average TCSC using a 3-s window
     # using 3-s moving window
     tcsc = threshold_crossing_sample_counts(samples, sampling_rate=sampling_rate, window_duration=3.0, threshold_ratio=0.2)
-    features.append(np.mean(tcsc))
-    # features.append(np.std(tcsc))
+    features.append(tcsc)
 
     # average TCI for every 1-second segments
-    tcis = threshold_crossing_intervals(samples, sampling_rate=sampling_rate, threshold_ratio=0.2)
-    features.append(np.mean(tcis))
-    # features.append(np.std(tcis))
+    tci = threshold_crossing_intervals(samples, sampling_rate=sampling_rate, threshold_ratio=0.2)
+    features.append(tci)
 
     # Standard exponential (STE)
     cdef double ste = standard_exponential(samples, sampling_rate)
@@ -499,7 +487,7 @@ def extract_features(samples, int sampling_rate):
     # (the original VF leak paper does not seem to do this).
     # http://www.ni.com/white-paper/4844/en/
     n_samples = len(samples)
-    fft = np.fft.fft(samples * hamming(n_samples))
+    fft = np.fft.fft(samples * signal.hamming(n_samples))
     fft_freq = np.fft.fftfreq(n_samples)
 
     cdef int peak_freq_idx = find_peak_freq(fft, fft_freq)
@@ -538,7 +526,7 @@ def extract_features(samples, int sampling_rate):
     features.append(spen)
 
     # MAV
-    # mav = mean_absolute_value(samples, sampling_rate)
-    # features.append(mav)
+    mav = mean_absolute_value(samples, sampling_rate)
+    features.append(mav)
 
     return features
