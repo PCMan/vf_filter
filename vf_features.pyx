@@ -3,7 +3,7 @@
 # This implements common VF related features reported in the literatures.
 # Felipe AA et al. 2014. Detection of Life-Threatening Arrhythmias Using Feature Selection and Support Vector Machines
 import pyximport; pyximport.install()  # use Cython
-# import numpy as np
+import numpy as np
 cimport numpy as np  # use cython to speed up numpy array access (http://docs.cython.org/src/userguide/numpy_tutorial.html)
 import scipy.signal as signal
 import pyeeg  # calculate sample entropy
@@ -306,7 +306,7 @@ cdef np.ndarray[double, ndim=1] moving_average(np.ndarray[double, ndim=1] sample
 
 
 # the VF leak algorithm
-cdef double vf_leak(np.ndarray[double, ndim=1] samples, np.ndarray[double, ndim=1] fft, np.ndarray[double, ndim=1] fft_freq):
+cdef double vf_leak(np.ndarray[double, ndim=1] samples, np.ndarray[double complex, ndim=1] fft, np.ndarray[double, ndim=1] fft_freq):
     # This method separates nearly sinusoidal waveforms from the rest.
     # VF is nearly sinusoidal. The idea is to move such signal by half period
     # trying to minimize the sum of the signal and its shifted copy.
@@ -330,7 +330,7 @@ cdef double vf_leak(np.ndarray[double, ndim=1] samples, np.ndarray[double, ndim=
 
 
 # spectral parameters (M and A2)
-cdef tuple spectral_features(np.ndarray[double, ndim=1] fft, np.ndarray[double, ndim=1] fft_freq, int sampling_rate):
+cdef tuple spectral_features(np.ndarray[double complex, ndim=1] fft, np.ndarray[double, ndim=1] fft_freq, int sampling_rate):
     # Find the peak frequency within the range of 0.5 Hz - 9.0 Hz
     # NOTE: the unit of time is sample number, so the unit of frequency is not Hz here
     # to convert to Hz, we have to multiply the frequencies with sample rate.
@@ -377,7 +377,7 @@ cdef tuple spectral_features(np.ndarray[double, ndim=1] fft, np.ndarray[double, 
 # FM feature: central frequency that biset the power spectrum
 # IEEE TRANSACTIONS ON BIOMEDICAL ENGINEERING, VOL 37, NO 6. JUNE 1990
 # The Median Frequency of the ECG During Ventricular Fibrillation: Its Use in an Algorithm for Estimating the Duration of Cardiac Arrest.
-cdef double central_frequency(np.ndarray[double, ndim=1] fft, np.ndarray[double, ndim=1] fft_freq, int sampling_rate):
+cdef double central_frequency(np.ndarray[double complex, ndim=1] fft, np.ndarray[double, ndim=1] fft_freq, int sampling_rate):
     # FM = sum(fi * pi) / sum(pi)
     #   pi: power component at ith frequency
     cdef np.ndarray[double, ndim = 1] power_spec = np.abs(fft) ** 2
@@ -515,8 +515,8 @@ cpdef extract_features(object src_samples, int sampling_rate):
     # apply a hamming window here for side lobe suppression.
     # (the original VF leak paper does not seem to do this).
     # http://www.ni.com/white-paper/4844/en/
-    fft = np.fft.fft(samples * signal.hamming(n_samples))
-    fft_freq = np.fft.fftfreq(n_samples)
+    cdef np.ndarray[double complex, ndim=1] fft = np.fft.fft(samples * signal.hamming(n_samples))
+    cdef np.ndarray[double, ndim = 1] fft_freq = np.fft.fftfreq(n_samples)
     # We only need the left half of the FFT result (with frequency > 0)
     cdef  int n_fft = np.ceil(n_samples / 2)
     fft = fft[0:n_fft]
