@@ -362,8 +362,10 @@ cdef tuple spectral_features(fft, fft_freq, int sampling_rate):
     # The original paper approximate the amplitude by real + imaginary parts instead of true modulus.
     amplitudes = np.abs(fft)
 
-    freq_range = np.logical_and(fft_freq >= (0.5 / sampling_rate), fft_freq <= (9.0 / sampling_rate))
-    cdef int peak_freq_idx = np.argmax(amplitudes[freq_range])
+    cdef int min_freq_idx = np.searchsorted(fft_freq, 0.5 / sampling_rate, side="right")
+    cdef int max_freq_idx = np.searchsorted(fft_freq, 9.0 / sampling_rate, side="left")
+    # Here the peak_freq_index should + the index of 0.5 Hz
+    cdef int peak_freq_idx = np.argmax(amplitudes[min_freq_idx:max_freq_idx]) + min_freq_idx
     cdef double peak_freq = fft_freq[peak_freq_idx]
     cdef double peak_amplitude = amplitudes[peak_freq_idx]
 
@@ -376,21 +378,22 @@ cdef tuple spectral_features(fft, fft_freq, int sampling_rate):
     #            amplitudes whose value < 5% of peak_freq are set to 0.
     cdef double spectral_moment = 0.0
     cdef double spec_max_freq = min(20 * peak_freq, 100.0 / sampling_rate)  # convert 100 Hz to use sample count as time unit
-    spec_range = fft_freq <= spec_max_freq  # range: 0 Hz to min(20 * peak_freq, 100 Hz)
-    m_amplitudes = amplitudes[spec_range]
-    sum_m_amplitudes = np.sum(m_amplitudes)
+    cdef int max_spec_idx = np.searchsorted(fft_freq, spec_max_freq, side="left")
+    m_amplitudes = amplitudes[0:max_spec_idx]
+    cdef double sum_m_amplitudes = np.sum(m_amplitudes)
 
     if sum_m_amplitudes != 0:  # in theory, division by zero should not happen here
-        spectral_moment = (1 / peak_freq) * np.dot(m_amplitudes, fft_freq[spec_range]) / sum_m_amplitudes
+        spectral_moment = (1 / peak_freq) * np.dot(m_amplitudes, fft_freq[0:max_spec_idx]) / sum_m_amplitudes
 
     # calculate A2
     # frequency range: 0.7 * peak_freq - 1.4 * peak_freq
-    cdef a2 = 0.0
-    a2_range = np.logical_and(fft_freq >= 0.7 * peak_freq, fft_freq <= 1.4 * peak_freq)
-    sum_amplitudes = np.sum(amplitudes[spec_range])
+    cdef double a2 = 0.0
+    cdef int min_a2_idx = np.searchsorted(fft_freq, 0.7 * peak_freq, side="right")
+    cdef int max_a2_idx = np.searchsorted(fft_freq, 1.4 * peak_freq, side="left")
+    cdef double sum_amplitudes = np.sum(amplitudes[0:max_spec_idx])
     if sum_amplitudes != 0:  # in theory, division by zero should not happen here
-        a2 = np.sum(amplitudes[a2_range]) / sum_amplitudes
-        
+        a2 = np.sum(amplitudes[min_a2_idx:max_a2_idx]) / sum_amplitudes
+
     return (spectral_moment, a2)
 
 
