@@ -114,7 +114,7 @@ def main():
         # try different class weighting with grid search
         n_vf = np.sum(y_data)
         max_weight = (len(y_data) - n_vf) / n_vf  # non-vf/vf ratio
-        param_grid["class_weight"] = [{0:1, 1:w} for w in np.linspace(1.0, max_weight, 4)]
+        param_grid["class_weight"] = [{0:1, 1:w} for w in np.linspace(1.0, max_weight * 1.5, 6)]
 
         model = grid_search.GridSearchCV(estimator, param_grid,
                                          scoring=cv_scorer,
