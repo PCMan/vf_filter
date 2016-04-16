@@ -72,7 +72,7 @@ cdef double threshold_crossing_sample_counts(samples, int sampling_rate, double 
 
         # multiply by a cosine window (Tukey window)
         # window *= tcsc_cosine_window(window_size, sampling_rate)
-        window *= signal.tukey(window_size)
+        window *= signal.tukey(window_size, alpha=(0.5 / window_duration))
 
         # use absolute values for analysis
         window = np.abs(window)
