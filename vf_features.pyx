@@ -313,19 +313,10 @@ cdef butter_lowpass_filter(data, double highcut, double fs, int order=5):
 '''
 
 cdef moving_average(samples, int order=5):
+    # Reference: https://www.otexts.org/fpp/6/2
     # Moving average can be calculated using convolution
     # http://matlabtricks.com/post-11/moving-average-by-convolution
     return np.convolve(samples, np.ones(order) / order, mode="same")
-
-    '''
-    # https://www.otexts.org/fpp/6/2
-    cdef int n_samples = len(samples)
-    ma = np.zeros(n_samples - order + 1)
-    cdef int k = int(order / 2)
-    for t in range(k, n_samples - k):
-        ma[t - k] = np.mean(samples[(t - k):(t + k + 1)])
-    return ma
-    '''
 
 
 # the VF leak algorithm
@@ -468,33 +459,27 @@ cpdef preprocessing(samples, int sampling_rate, bint plotting=False):
     cdef int n_samples = len(samples)
 
     if plotting:
-        f, ax = plt.subplots(5, sharex=True)
+        f, ax = plt.subplots(3, sharex=True)
         ax[0].set_title("before preprocessing")
         ax[0].plot(samples)
     # normalize the input ECG sequence
     samples = (samples - np.min(samples)) / (np.max(samples) - np.min(samples))
-    if plotting:
-        ax[1].set_title("normaliztion")
-        ax[1].plot(samples)
 
     # perform mean subtraction
     samples = samples - np.mean(samples)
-    if plotting:
-        ax[2].set_title("mean subtraction")
-        ax[2].plot(samples)
 
     # 5-order moving average
     samples = moving_average(samples, order=5)
     if plotting:
-        ax[3].set_title("moving average")
-        ax[3].plot(samples)
+        ax[1].set_title("moving average")
+        ax[1].plot(samples)
 
     # band pass filter
     samples = butter_bandpass_filter(samples, 0.5, 30, sampling_rate)
     if plotting:
-        ax[4].set_title("band pass filter")
-        ax[4].plot(samples)
-        ax[4].plot([0, len(samples)], [0.2, 0.2], 'r')  # draw a horizontal line at 0.2
+        ax[2].set_title("band pass filter")
+        ax[2].plot(samples)
+        ax[2].plot([0, len(samples)], [0.2, 0.2], 'r')  # draw a horizontal line at 0.2
         plt.plot(samples)
         plt.show()
     return samples
