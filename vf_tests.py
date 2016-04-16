@@ -19,7 +19,7 @@ def main():
     # parse command line arguments
     parser = argparse.ArgumentParser()
     # known estimators
-    estimator_names = ("logistic_regression", "random_forest", "gradient_boosting", "svc")
+    estimator_names = ("logistic_regression", "random_forest", "adaboost", "gradient_boosting", "svc")
     parser.add_argument("-m", "--model", type=str, required=True, choices=estimator_names)
     parser.add_argument("-o", "--output", type=str, required=True)
     parser.add_argument("-j", "--jobs", type=int, default=-1)
@@ -91,6 +91,16 @@ def main():
         model = grid_search.GridSearchCV(estimator, param_grid,
                                         scoring=cv_scorer,
                                         n_jobs=n_jobs, cv=n_cv_folds, verbose=0)
+        param_names = param_grid.keys()
+    elif estimator_name == "adaboost":
+        estimator = ensemble.AdaBoostClassifier()
+        param_grid = {
+            "n_estimators": list(range(30, 150, 10)),
+            "learning_rate": np.logspace(-1, 0, 2)
+        }
+        model = grid_search.GridSearchCV(estimator, param_grid,
+                                         scoring=cv_scorer,
+                                         n_jobs=n_jobs, cv=n_cv_folds, verbose=0)
         param_names = param_grid.keys()
     elif estimator_name == "svc":
         estimator = svm.SVC(shrinking=False,

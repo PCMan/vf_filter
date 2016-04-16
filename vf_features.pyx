@@ -160,7 +160,7 @@ cdef double standard_exponential(samples, int sampling_rate, int time_constant=3
             if sample > threshold:
                 higher = True
                 n_crosses += 1
-    cdef double duration = len(samples) / sampling_rate
+    cdef double duration = float(len(samples)) / sampling_rate
     return n_crosses / duration
 
 
@@ -201,7 +201,7 @@ cdef double modified_exponential(samples, int sampling_rate, double time_constan
                 t += 1
     except StopIteration:  # no more local maximum values
         pass
-    cdef double duration = n_samples / sampling_rate
+    cdef double duration = float(n_samples) / sampling_rate
     return n_lifted / duration
 
 
