@@ -303,15 +303,21 @@ cdef butter_bandpass_filter(data, double lowcut, double highcut, double fs, int 
     return y
 
 
+'''
 cdef butter_lowpass_filter(data, double highcut, double fs, int order=5):
     cdef double nyq = 0.5 * fs
     cdef double high = highcut / nyq
     b, a = signal.butter(order, high, btype='low')
     y = signal.lfilter(b, a, data)
     return y
-
+'''
 
 cdef moving_average(samples, int order=5):
+    # Moving average can be calculated using convolution
+    # http://matlabtricks.com/post-11/moving-average-by-convolution
+    return np.convolve(samples, np.ones(order) / order, mode="same")
+
+    '''
     # https://www.otexts.org/fpp/6/2
     cdef int n_samples = len(samples)
     ma = np.zeros(n_samples - order + 1)
@@ -319,6 +325,7 @@ cdef moving_average(samples, int order=5):
     for t in range(k, n_samples - k):
         ma[t - k] = np.mean(samples[(t - k):(t + k + 1)])
     return ma
+    '''
 
 
 # the VF leak algorithm
@@ -346,45 +353,51 @@ cdef double vf_leak(samples, fft, fft_freq):
 
 
 # spectral parameters (M and A2)
-cdef tuple spectral_features(fft, fft_freq, sampling_rate):
+cdef tuple spectral_features(fft, fft_freq, int sampling_rate):
     # Find the peak frequency within the range of 0.5 Hz - 9.0 Hz
     # NOTE: the unit of time is sample number, so the unit of frequency is not Hz here
     # to convert to Hz, we have to multiply the frequencies with sample rate.
     # fft_freq_hz = fft_freq * sampling_rate
-    freq_range = np.logical_and(fft_freq >= (0.5 / sampling_rate), fft_freq <= (9.0 / sampling_rate))
-    peak_freq_idx = np.argmax(fft[freq_range])
-    peak_freq = fft_freq[peak_freq_idx]
-
-    # FIXME: what if peak freq = 0? (this will cause division by zero exception later)
-    if peak_freq == 0:  # is this correct?
-        peak_freq = fft_freq[1]
 
     # The original paper approximate the amplitude by real + imaginary parts instead of true modulus.
     amplitudes = np.abs(fft)
-    # amplitudes whose value is less than 5% of peak frequency are set to zero.
-    amplitudes[amplitudes < (0.05 * amplitudes[peak_freq_idx])] = 0
+
+    freq_range = np.logical_and(fft_freq >= (0.5 / sampling_rate), fft_freq <= (9.0 / sampling_rate))
+    cdef int peak_freq_idx = np.argmax(amplitudes[freq_range])
+    cdef double peak_freq = fft_freq[peak_freq_idx]
+    cdef double peak_amplitude = amplitudes[peak_freq_idx]
+
+    # amplitudes whose value is less than 5% of peak amplitude are set to zero.
+    amplitudes[amplitudes < (0.05 * peak_amplitude)] = 0
 
     # first spectral moment M = 1/peak_freq * (ai dot wi/sum(ai) for i = 1 to jmax
     # jmax: the index of the highest investigated frequency
     # peak_freq: the frequency of the component with the largest amplitude in the range 0.5 - 9 Hz
     #            amplitudes whose value < 5% of peak_freq are set to 0.
-    spec_max_freq = min(20 * peak_freq, 100 / sampling_rate)  # convert 100 Hz to use sample count as time unit
+    cdef double spectral_moment = 0.0
+    cdef double spec_max_freq = min(20 * peak_freq, 100.0 / sampling_rate)  # convert 100 Hz to use sample count as time unit
     spec_range = fft_freq <= spec_max_freq  # range: 0 Hz to min(20 * peak_freq, 100 Hz)
     m_amplitudes = amplitudes[spec_range]
-    spectral_moment = (1 / peak_freq) * np.dot(m_amplitudes, fft_freq[spec_range]) / np.sum(m_amplitudes)
+    sum_m_amplitudes = np.sum(m_amplitudes)
+
+    if sum_m_amplitudes != 0:  # in theory, division by zero should not happen here
+        spectral_moment = (1 / peak_freq) * np.dot(m_amplitudes, fft_freq[spec_range]) / sum_m_amplitudes
 
     # calculate A2
     # frequency range: 0.7 * peak_freq - 1.4 * peak_freq
+    cdef a2 = 0.0
     a2_range = np.logical_and(fft_freq >= 0.7 * peak_freq, fft_freq <= 1.4 * peak_freq)
-    a2 = np.sum(amplitudes[a2_range]) / np.sum(amplitudes[spec_range])
-
+    sum_amplitudes = np.sum(amplitudes[spec_range])
+    if sum_amplitudes != 0:  # in theory, division by zero should not happen here
+        a2 = np.sum(amplitudes[a2_range]) / sum_amplitudes
+        
     return (spectral_moment, a2)
 
 
 # FM feature: central frequency that biset the power spectrum
 # IEEE TRANSACTIONS ON BIOMEDICAL ENGINEERING, VOL 37, NO 6. JUNE 1990
 # The Median Frequency of the ECG During Ventricular Fibrillation: Its Use in an Algorithm for Estimating the Duration of Cardiac Arrest.
-cdef double central_frequency(fft, fft_freq, sampling_rate):
+cdef double central_frequency(fft, fft_freq, int sampling_rate):
     # FM = sum(fi * pi) / sum(pi)
     #   pi: power component at ith frequency
     power_spec = np.abs(fft) ** 2
@@ -473,9 +486,6 @@ cpdef preprocessing(samples, int sampling_rate, bint plotting=False):
         ax[3].set_title("moving average")
         ax[3].plot(samples)
 
-    # low pass filter
-    # samples = butter_lowpass_filter(samples, 30, sampling_rate)
-
     # band pass filter
     samples = butter_bandpass_filter(samples, 0.5, 30, sampling_rate)
     if plotting:
@@ -559,7 +569,7 @@ def extract_features(samples, int sampling_rate):
     features.append(spen)
 
     # MAV
-    mav = mean_absolute_value(samples, sampling_rate)
+    cdef double mav = mean_absolute_value(samples, sampling_rate)
     features.append(mav)
 
     return features
