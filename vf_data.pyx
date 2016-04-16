@@ -56,6 +56,7 @@ class Record:
         self.name = record_name
 
         record_filename = os.path.join(dataset_dir, db_name, record)
+        cdef list annotations
         with open(record_filename, "rb") as f:
             self.sampling_rate = pickle.load(f)
             self.signals = pickle.load(f)
@@ -71,17 +72,19 @@ class Record:
         return len(self.signals) / self.sampling_rate
 
     # perform segmentation
-    def get_segments(self, duration=8.0):
+    def get_segments(self, double duration=8.0):
         cdef int n_samples = len(self.signals)
         cdef int segment_size = int(self.sampling_rate * duration)
         cdef int n_segments = int(np.floor(n_samples / segment_size))
-        segments = []
+        cdef list segments = []
 
         annotations = self.annotations
         cdef int n_annotations = len(annotations)
-        cdef int i_ann = 0
+        cdef int i_ann = 0, i_seg
         cdef bint in_vf_episode = False
         cdef bint in_artifacts = False
+        cdef int vf_begin_time, vf_end_time
+        cdef double vf_duration
         for i_seg in range(n_segments):
             # split the segment
             segment_begin = i_seg * segment_size
@@ -208,7 +211,7 @@ def load_all_segments():
             cache_file.close()
 
 
-def extract_features_job(segment):
+def extract_features_job(object segment):
     cdef int segment_duration = 8  # 8 sec per segment
     signals = segment.signals
     # resample to DEFAULT_SAMPLING_RATE as needed
@@ -224,7 +227,7 @@ def extract_features_job(segment):
     return (features, label, segment.record, segment.begin_time)
 
 
-def load_data(n_jobs):
+def load_data(int n_jobs):
     features_cache_name = "features.dat"
     x_info = []
     # load cached features if they exist

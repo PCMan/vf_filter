@@ -422,6 +422,7 @@ cdef double lz_complexity(np.ndarray[double, ndim=1] samples):
         threshold = 0.2 * neg_peak
 
     # make the samples a binary string S based on the threshold
+    cdef bint b
     bin_str = bytearray([1 if b else 0 for b in (samples > threshold)])
     s = bytearray([bin_str[0]])  # S=s1
     q = bytearray([bin_str[1]])  # Q=s2
@@ -473,9 +474,9 @@ cpdef np.ndarray[double, ndim=1] preprocessing(object src_samples, int sampling_
 
 
 # extract features from raw sample points of the original ECG signal
-def extract_features(samples, int sampling_rate):
+cpdef extract_features(object src_samples, int sampling_rate):
     features = array("d")
-    samples = preprocessing(samples, sampling_rate)
+    cdef np.ndarray[double, ndim=1] samples = preprocessing(src_samples, sampling_rate)
     cdef int n_samples = len(samples)
 
     # Time domain/morphology
