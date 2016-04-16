@@ -123,7 +123,7 @@ def main():
         return
 
     # Run the selected test
-    csv_fields = ["se", "sp", "ppv", "acc", "se(sp95)", "se(sp99)", "tp", "tn", "fp", "fn"]
+    csv_fields = ["se", "sp", "ppv", "acc", "se(sp95)", "se(sp97)", "se(sp99)", "tp", "tn", "fp", "fn"]
     csv_fields.extend(sorted(param_names))
     with open(args.output, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=csv_fields)
@@ -162,6 +162,9 @@ def main():
                 x = np.searchsorted(false_pos_rate, 0.05)
                 row["se(sp95)"] = true_pos_rate[x]
 
+                x = np.searchsorted(false_pos_rate, 0.03)
+                row["se(sp97)"] = true_pos_rate[x]
+
                 x = np.searchsorted(false_pos_rate, 0.01)
                 row["se(sp99)"] = true_pos_rate[x]
 
@@ -169,7 +172,7 @@ def main():
             if hasattr(model, "best_params_"):
                 row.update(model.best_params_)
 
-            print("  ", row)
+            print("  ", ", ".join(["{0}={1}".format(field, row[field]) for field in csv_fields]))
             writer.writerow(row)
 
 
