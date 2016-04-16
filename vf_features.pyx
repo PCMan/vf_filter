@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from array import array  # python array with static types
 
 
-feature_names = ("TCSC", "TCI", "STE", "MEA", "PSR", "HILB", "VF", "M", "A2", "LZ", "SpEn", "MAV")
+feature_names = ("TCSC", "TCI", "STE", "MEA", "PSR", "HILB", "VF", "M", "A2", "FM", "LZ", "SpEn", "MAV")
 
 # time domain/morphology
 
@@ -381,6 +381,18 @@ cdef tuple spectral_features(fft, fft_freq, sampling_rate):
     return (spectral_moment, a2)
 
 
+# FM feature: central frequency that biset the power spectrum
+# IEEE TRANSACTIONS ON BIOMEDICAL ENGINEERING, VOL 37, NO 6. JUNE 1990
+# The Median Frequency of the ECG During Ventricular Fibrillation: Its Use in an Algorithm for Estimating the Duration of Cardiac Arrest.
+cdef double central_frequency(fft, fft_freq, sampling_rate):
+    # FM = sum(fi * pi) / sum(pi)
+    #   pi: power component at ith frequency
+    power_spec = np.abs(fft) ** 2
+    cdef double central_freq = np.dot(fft_freq, power_spec) / np.sum(power_spec)
+    # convert the frequency to Hz
+    return central_freq * sampling_rate
+
+
 # the original sample entropy algorithm is too slow.
 # The implementation provided by sampen python package is also slow.
 # here we use sample entropy implemented by PyEEG project, which is a little bit faster.
@@ -532,6 +544,10 @@ def extract_features(samples, int sampling_rate):
     (spectral_moment, a2) = spectral_features(fft, fft_freq, sampling_rate)
     features.append(spectral_moment)
     features.append(a2)
+
+    # central frequency (FM)
+    cdef double central_freq = central_frequency(fft, fft_freq, sampling_rate)
+    features.append(central_freq)
 
     # complexity parameters
     # -------------------------------------------------
