@@ -106,21 +106,22 @@ def main():
         estimator = svm.SVC(shrinking=False,
                             cache_size=2048,
                             verbose=False,
-                            probability=True,
-                            class_weight=class_weight)
+                            probability=True)
         param_grid = {
-            "C": np.logspace(-1, 1, 3),
-            "gamma": np.logspace(-3, -1, 3)
+            "C": np.logspace(0, 1, 2),
+            "gamma": np.logspace(-2, -1, 2)
         }
+        # try different class weighting with grid search
+        n_vf = np.sum(y_data)
+        max_weight = (len(y_data) - n_vf) / n_vf  # non-vf/vf ratio
+        param_grid["class_weight"] = [{0:1, 1:w} for w in np.linspace(1.0, max_weight, 4)]
+
         model = grid_search.GridSearchCV(estimator, param_grid,
                                          scoring=cv_scorer,
                                          n_jobs=n_jobs,
                                          cv=n_cv_folds,
                                          verbose=0)
         param_names = param_grid.keys()
-    else:
-        print("unknown estimator")
-        return
 
     # Run the selected test
     csv_fields = ["se", "sp", "ppv", "acc", "se(sp95)", "se(sp97)", "se(sp99)", "tp", "tn", "fp", "fn"]
