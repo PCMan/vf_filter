@@ -243,16 +243,16 @@ cdef double phase_space_reconstruction(np.ndarray[double, ndim=1] samples, int s
     cdef int n_samples = len(samples)
     cdef int n_delay = int(delay * sampling_rate)
 
-    x_samples = samples[0:n_samples - n_delay]
-    y_samples = samples[n_delay:n_samples]
+    cdef np.ndarray[double, ndim=1] x_samples = samples[0:n_samples - n_delay]
+    cdef np.ndarray[double, ndim=1] y_samples = samples[n_delay:n_samples]
     cdef double offset = np.min(samples)
     cdef double axis_range = np.max(samples) - offset
 
     # convert X and Y values to indices of the 40 x 40 grid
-    cdef np.ndarray[int, ndim=1] grid_x = ((x_samples - offset) * 39.0 / axis_range).astype("int")
-    cdef np.ndarray[int, ndim=1] grid_y = ((y_samples - offset) * 39.0 / axis_range).astype("int")
+    cdef np.ndarray[np.int8_t, ndim=1] grid_x = ((x_samples - offset) * 39.0 / axis_range).astype(np.int8)
+    cdef np.ndarray[np.int8_t, ndim=1] grid_y = ((y_samples - offset) * 39.0 / axis_range).astype(np.int8)
 
-    cdef np.ndarray[int, ndim=1] grid = np.zeros((40, 40), dtype="int")
+    cdef np.ndarray[np.int8_t, ndim=2] grid = np.zeros((40, 40), dtype=np.int8)
     grid[grid_y, grid_x] = 1
     return np.sum(grid) / 1600
 
@@ -267,9 +267,9 @@ cdef double hilbert_psr(np.ndarray[double, ndim=1] samples, int sampling_rate):
     cdef int n_samples = int(duration * 50)
 
     # phase space plotting (40 x 40 grid)
-    x_samples = signal.resample(samples, n_samples)
-    analytical_signals = signal.hilbert(x_samples)
-    y_samples = np.imag(analytical_signals)  # the imaginary part of the analytical signal is the Hilbert transform of X(t)
+    cdef np.ndarray[double, ndim=1] x_samples = signal.resample(samples, n_samples)
+    cdef np.ndarray[double complex, ndim = 1] analytical_signals = signal.hilbert(x_samples)
+    cdef np.ndarray[double, ndim = 1] y_samples = np.imag(analytical_signals)  # the imaginary part of the analytical signal is the Hilbert transform of X(t)
 
     cdef double x_offset = np.min(x_samples)
     cdef double x_range = np.max(x_samples) - x_offset
@@ -277,11 +277,11 @@ cdef double hilbert_psr(np.ndarray[double, ndim=1] samples, int sampling_rate):
     cdef double y_range = np.max(y_samples) - y_offset
 
     # convert X and Y values to indices of the 40 x 40 grid
-    cdef np.ndarray[int, ndim=1] grid_x = ((x_samples - x_offset) * 39.0 / x_range).astype("int")
-    cdef np.ndarray[int, ndim=1] grid_y = ((y_samples - y_offset) * 39.0 / y_range).astype("int")
+    cdef np.ndarray[np.int8_t, ndim=1] grid_x = ((x_samples - x_offset) * 39.0 / x_range).astype(np.int8)
+    cdef np.ndarray[np.int8_t, ndim=1] grid_y = ((y_samples - y_offset) * 39.0 / y_range).astype(np.int8)
 
     # calculate the number of visited cells
-    cdef np.ndarray[int, ndim=1] grid = np.zeros((40, 40))
+    cdef np.ndarray[np.int8_t, ndim=2] grid = np.zeros((40, 40), dtype=np.int8)
     grid[grid_y, grid_x] = 1
     return np.sum(grid) / 1600
 
