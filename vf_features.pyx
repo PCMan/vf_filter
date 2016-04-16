@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from array import array  # python array with static types
 
 
-feature_names = ("TCSC", "TCI", "STE", "MEA", "PSR", "HILB", "VF", "SPEC", "LZ", "SpEn", "MAV")
+feature_names = ("TCSC", "TCI", "STE", "MEA", "PSR", "HILB", "VF", "M", "A2", "LZ", "SpEn", "MAV")
 
 # time domain/morphology
 
@@ -97,7 +97,7 @@ cdef double threshold_crossing_intervals(samples, int sampling_rate, double thre
     if window_end > n_samples:
         window_end = window_size = n_samples
 
-    results = []
+    cdef list results = []
     cdef int n_cross, first_cross, last_cross
     while window_end <= n_samples:
         window = samples[window_begin:window_end]
@@ -321,16 +321,8 @@ cdef moving_average(samples, int order=5):
     return ma
 
 
-# find the peak frequency and its index in the FFT spectrum
-cdef int find_peak_freq(fft, fft_freq):
-    cdef int n_freq = len(fft) // 2
-    cdef int peak_freq_idx = fft[:n_freq].argmax()
-    return peak_freq_idx
-
-
 # the VF leak algorithm
-cdef double vf_leak(samples, double peak_freq):
-    # From Computers in Cardiology 2002;29:213−216.
+cdef double vf_leak(samples, fft, fft_freq):
     # This method separates nearly sinusoidal waveforms from the rest.
     # VF is nearly sinusoidal. The idea is to move such signal by half period
     # trying to minimize the sum of the signal and its shifted copy.
@@ -338,6 +330,9 @@ cdef double vf_leak(samples, double peak_freq):
     # calculate VF leaks
     # find the central/peak frequency
     # http://cinc.mit.edu/archives/2002/pdf/213.pdf
+    cdef int peak_freq_idx = np.argmax(fft)
+    cdef double peak_freq = fft_freq[peak_freq_idx]  # From Computers in Cardiology 2002;29:213−216.
+
     cdef double cycle
     if peak_freq != 0:
         cycle = (1.0 / peak_freq)  # in terms of samples
@@ -348,6 +343,42 @@ cdef double vf_leak(samples, double peak_freq):
     original = samples[half_cycle:]
     shifted = samples[:-half_cycle]
     return np.sum(np.abs(original + shifted)) / np.sum(np.abs(original) + np.abs(shifted))
+
+
+# spectral parameters (M and A2)
+cdef tuple spectral_features(fft, fft_freq, sampling_rate):
+    # Find the peak frequency within the range of 0.5 Hz - 9.0 Hz
+    # NOTE: the unit of time is sample number, so the unit of frequency is not Hz here
+    # to convert to Hz, we have to multiply the frequencies with sample rate.
+    # fft_freq_hz = fft_freq * sampling_rate
+    freq_range = np.logical_and(fft_freq >= (0.5 / sampling_rate), fft_freq <= (9.0 / sampling_rate))
+    peak_freq_idx = np.argmax(fft[freq_range])
+    peak_freq = fft_freq[peak_freq_idx]
+
+    # FIXME: what if peak freq = 0? (this will cause division by zero exception later)
+    if peak_freq == 0:  # is this correct?
+        peak_freq = fft_freq[1]
+
+    # The original paper approximate the amplitude by real + imaginary parts instead of true modulus.
+    amplitudes = np.abs(fft)
+    # amplitudes whose value is less than 5% of peak frequency are set to zero.
+    amplitudes[amplitudes < (0.05 * amplitudes[peak_freq_idx])] = 0
+
+    # first spectral moment M = 1/peak_freq * (ai dot wi/sum(ai) for i = 1 to jmax
+    # jmax: the index of the highest investigated frequency
+    # peak_freq: the frequency of the component with the largest amplitude in the range 0.5 - 9 Hz
+    #            amplitudes whose value < 5% of peak_freq are set to 0.
+    spec_max_freq = min(20 * peak_freq, 100 / sampling_rate)  # convert 100 Hz to use sample count as time unit
+    spec_range = fft_freq <= spec_max_freq  # range: 0 Hz to min(20 * peak_freq, 100 Hz)
+    m_amplitudes = amplitudes[spec_range]
+    spectral_moment = (1 / peak_freq) * np.dot(m_amplitudes, fft_freq[spec_range]) / np.sum(m_amplitudes)
+
+    # calculate A2
+    # frequency range: 0.7 * peak_freq - 1.4 * peak_freq
+    a2_range = np.logical_and(fft_freq >= 0.7 * peak_freq, fft_freq <= 1.4 * peak_freq)
+    a2 = np.sum(amplitudes[a2_range]) / np.sum(amplitudes[spec_range])
+
+    return (spectral_moment, a2)
 
 
 # the original sample entropy algorithm is too slow.
@@ -486,35 +517,21 @@ def extract_features(samples, int sampling_rate):
     # apply a hamming window here for side lobe suppression.
     # (the original VF leak paper does not seem to do this).
     # http://www.ni.com/white-paper/4844/en/
-    n_samples = len(samples)
     fft = np.fft.fft(samples * signal.hamming(n_samples))
     fft_freq = np.fft.fftfreq(n_samples)
-
-    cdef int peak_freq_idx = find_peak_freq(fft, fft_freq)
-    cdef double peak_freq = fft_freq[peak_freq_idx]
+    # We only need the left half of the FFT result (with frequency > 0)
+    cdef  int n_fft = np.ceil(n_samples / 2)
+    fft = fft[0:n_fft]
+    fft_freq = fft_freq[0:n_fft]
 
     # calculate VF leaks
-    features.append(vf_leak(samples, peak_freq))
+    features.append(vf_leak(samples, fft, fft_freq))
 
-    # calculate other spectral parameters
-    # first spectral moment M = 1/peak_freq * (sum(ai * wi)/sum(wi)) for i = 1 to jmax
-
-    # FIXME: what if peak freq = 0?
-    if peak_freq == 0:  # is this correct?
-        peak_freq = fft_freq[1]
-
-    cdef int jmax = min(20 * peak_freq_idx, 100)
-    # The original paper approximate the amplitude by real + imaginary parts instead.
-    amplitudes = np.abs(fft[0:jmax + 1])
-    cdef double max_amplitude = np.max(amplitudes)
-    # amplitudes whose value is less than 5% of max are set to zero.
-    amplitudes[amplitudes < (0.05 * max_amplitude)] = 0
-    cdef double spectral_moment = (1 / peak_freq) * np.sum([amplitudes[i] * fft_freq[i] for i in range(0, jmax + 1)]) / np.sum(amplitudes)
+    # calculate other spectral parameters (M and A2)
+    cdef double spectral_moment, a2
+    (spectral_moment, a2) = spectral_features(fft, fft_freq, sampling_rate)
     features.append(spectral_moment)
-
-    # A1: 0 -> min(20 * peak_freq, 100)
-    # A2: 0.5 -> peak_freq / 2
-    # A3: 0.6 bands around 2 * peak_freq -> 8 * peak_freq divided by 0.5 -> min(20 * peak_freq, 100)
+    features.append(a2)
 
     # complexity parameters
     # -------------------------------------------------
