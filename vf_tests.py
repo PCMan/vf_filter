@@ -42,7 +42,7 @@ def main():
     test_size = args.test_percent / 100
     if test_size > 1:
         test_size = 0.3
-    class_weight = "balanced" if args.balanced_weight else None
+
     selected_features = args.features
 
     # build scoring function
@@ -55,6 +55,13 @@ def main():
     # load features
     x_data, y_data, x_info = load_data(n_jobs)
     print("Summary:\n", "# of segments:", len(x_data), "# of VT/Vf:", np.sum(y_data), len(x_info))
+
+    # build different class weights
+    class_weights = None
+    if args.balanced_weight:
+        n_vf = np.sum(y_data)
+        max_weight = (len(y_data) - n_vf) / n_vf  # non-vf/vf ratio
+        class_weights = [{0:1, 1:w} for w in np.linspace(1.0, max_weight * 1.5, 6)]
 
     # only select the specified feature
     if selected_features:
@@ -71,13 +78,14 @@ def main():
     if estimator_name == "logistic_regression":
         model = linear_model.LogisticRegressionCV(scoring=cv_scorer,
                                                   n_jobs=n_jobs,
-                                                  cv=n_cv_folds,
-                                                  class_weight=class_weight)
+                                                  cv=n_cv_folds)
     elif estimator_name == "random_forest":
-        estimator = ensemble.RandomForestClassifier(class_weight=class_weight)
+        estimator = ensemble.RandomForestClassifier()
         param_grid = {
             "n_estimators": list(range(10, 110, 10))
         }
+        if class_weights:
+            param_grid["class_weight"] = class_weights
         model = grid_search.GridSearchCV(estimator, param_grid,
                                         scoring=cv_scorer,
                                         n_jobs=n_jobs, cv=n_cv_folds, verbose=0)
@@ -111,11 +119,8 @@ def main():
             "C": np.logspace(0, 1, 2),
             "gamma": np.logspace(-2, -1, 2)
         }
-        # try different class weighting with grid search
-        n_vf = np.sum(y_data)
-        max_weight = (len(y_data) - n_vf) / n_vf  # non-vf/vf ratio
-        param_grid["class_weight"] = [{0:1, 1:w} for w in np.linspace(1.0, max_weight * 1.5, 6)]
-
+        if class_weights:
+            param_grid["class_weight"] = class_weights
         model = grid_search.GridSearchCV(estimator, param_grid,
                                          scoring=cv_scorer,
                                          n_jobs=n_jobs,
