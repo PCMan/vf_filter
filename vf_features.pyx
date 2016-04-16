@@ -21,6 +21,7 @@ cdef threshold_crossing_count(samples, double threshold_ratio=0.2):
     cdef int first_cross = -1
     cdef int last_cross = -1
     cdef double sample
+    cdef int i
     for i in range(1, len(samples)):
         sample = samples[i]
         if higher:
@@ -117,6 +118,7 @@ cdef double threshold_crossing_intervals(samples, int sampling_rate, double thre
         last_result = 2
 
     cdef double n, t1, t2, t3, t4, divider, tci
+    cdef int i
     for i in range(first_result, last_result):
         n, t2, t3 = results[i]
         t1 = results[i - 1][1] if i >= 1 else 0  # last cross of the previous 1-s segment
@@ -146,6 +148,7 @@ cdef double standard_exponential(samples, int sampling_rate, int time_constant=3
     cdef double n_crosses = 0.0
     cdef bint higher = True if samples[0] > max_amplitude * np.exp(-np.abs(0 - max_time) / time_constant) else False
     cdef double threshold, sample
+    cdef int t
     for t in range(1, len(samples) - 1):
         threshold = max_amplitude * np.exp(-np.abs(t - max_time) / time_constant)
         sample = samples[t]
@@ -161,14 +164,7 @@ cdef double standard_exponential(samples, int sampling_rate, int time_constant=3
     return n_crosses / duration
 
 
-cdef int find_first_local_maximum(x, int start=0, double threshold=0.0):
-    for i in range(start + 1, len(x) - 1):
-        if (x[i] - x[i - 1]) >= 0 >= (x[i + 1] - x[i]) and (x[i] >= threshold):
-            return i
-    return -1
-
-
-cdef double modified_exponential(samples, int sampling_rate, double peak_threshold=0.2, double time_constant=0.2):
+cdef double modified_exponential(samples, int sampling_rate, double time_constant=0.2):
     # similar to standard exponential, but uses relative max, not global max.
     # lift the exponential curve to the relative max again at every intersection.
     # E(t) = Mj * exp(-(t - tm,j) / T), tm,j <= t <= tc,j
@@ -177,40 +173,34 @@ cdef double modified_exponential(samples, int sampling_rate, double peak_thresho
     #   T: time constant: default to 2.0 second
     #   tc,j: the time value of cross
     cdef int n_lifted = 0
-    samples = np.array(samples)
     cdef int n_samples = len(samples)
     time_constant *= sampling_rate  # in terms of samples
     # find all local maximum and get their time values
-    # FIXME: the original paper does not describe how to correctly identify peaks.
-    # Let's set a simple threshold here. :-(
-    peak_threshold *= np.max(samples)
-    cdef int max_time = find_first_local_maximum(samples, start=0, threshold=peak_threshold)
-    cdef int t = max_time + 1
-    # exp_value = list(samples[0:t])
-    cdef double local_max, et
-    while t < n_samples:
-        sample = samples[t]
-        # calculate the exponential value
-        local_max = samples[max_time]
-        et = local_max * np.exp(-(t - max_time) / time_constant)
-        # exp_value.append(et)
-        if et < sample:  # cross happens
-            # lift the curve again
-            n_lifted += 1
-            # find next local maximum
-            max_time = find_first_local_maximum(samples, start=t, threshold=peak_threshold)
-            if max_time == -1:
-                break
-            # exp_value.extend(samples[t + 1:max_time + 1])
-            t = max_time + 1
-        else:
-            t += 1
-
-    '''
-    plt.plot(samples)
-    plt.plot(exp_value)
-    plt.show()
-    '''
+    local_max_indices = iter(signal.argrelmax(samples)[0])
+    cdef double sample, local_max
+    cdef int t, local_max_idx
+    try:
+        local_max_idx = next(local_max_indices)
+        local_max = samples[local_max_idx]
+        t = local_max_idx + 1
+        while t < n_samples:
+            sample = samples[t]
+            # calculate the exponential value
+            et = local_max * np.exp(-(t - local_max_idx) / time_constant)
+            if et < sample:  # cross happens
+                # find next local maximum
+                while True:
+                    local_max_idx = next(local_max_indices)
+                    if local_max_idx > t:
+                        break
+                # lift the curve again at the next local maximum
+                n_lifted += 1
+                local_max = samples[local_max_idx]
+                t = local_max_idx + 1
+            else:
+                t += 1
+    except StopIteration:  # no more local maximum values
+        pass
     cdef double duration = n_samples / sampling_rate
     return n_lifted / duration
 
@@ -439,6 +429,7 @@ cdef double lz_complexity(samples):
     bin_str = bytearray([1 if b else 0 for b in (samples > threshold)])
     s = bytearray([bin_str[0]])  # S=s1
     q = bytearray([bin_str[1]])  # Q=s2
+    cdef int i
     for i in range(2, n_samples):
         # SQ concatenation with the last char deleted => SQpi
         sq = s + q[:-1]
