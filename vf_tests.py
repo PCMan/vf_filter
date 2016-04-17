@@ -43,6 +43,10 @@ def main():
     if test_size > 1:
         test_size = 0.3
 
+    class_weight = None
+    if args.balanced_weight:
+        class_weight = "balanced"
+
     selected_features = args.features
 
     # build scoring function
@@ -70,13 +74,13 @@ def main():
     param_grid = None
     support_class_weight = False
     if estimator_name == "logistic_regression":
-        estimator = linear_model.LogisticRegression()
+        estimator = linear_model.LogisticRegression(class_weight=class_weight)
         param_grid = {
             "C": np.logspace(-4, 4, 10)
         }
         support_class_weight = True
     elif estimator_name == "random_forest":
-        estimator = ensemble.RandomForestClassifier()
+        estimator = ensemble.RandomForestClassifier(class_weight=class_weight)
         param_grid = {
             "n_estimators": list(range(10, 110, 10))
         }
@@ -97,7 +101,8 @@ def main():
         estimator = svm.SVC(shrinking=False,
                             cache_size=2048,
                             verbose=False,
-                            probability=True)
+                            probability=True,
+                            class_weight=class_weight)
         param_grid = {
             "C": np.logspace(0, 1, 2),
             "gamma": np.logspace(-2, -1, 2)
@@ -107,9 +112,6 @@ def main():
     # Run the selected test
     csv_fields = ["se", "sp", "ppv", "acc", "se(sp95)", "se(sp97)", "se(sp99)", "tp", "tn", "fp", "fn"]
     csv_fields.extend(sorted(param_grid.keys()))
-    if support_class_weight:
-        csv_fields.append("class_weight")
-
     with open(args.output, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=csv_fields)
         writer.writeheader()
@@ -128,17 +130,13 @@ def main():
 
             fit_params = None
             # try to balance class weighting
-            if args.balanced_weight:
+            if args.balanced_weight and not support_class_weight:
+                # perform sample weighting instead if the estimator does not support class weighting
                 n_vf = np.sum(y_data)
                 sample_ratio = (len(y_data) - n_vf) / n_vf  # non-vf/vf ratio
-
-                if support_class_weight:  # use class weighting
-                    # build different class weights
-                    param_grid["class_weight"] = [{0: 1, 1: w} for w in np.linspace(1.0, sample_ratio * 1.5, 6)]
-                else:  # use sample weighting (fixed)
-                    fit_params = {
-                        "sample_weight": np.array([sample_ratio if y == 1 else 1.0 for y in y_train])
-                    }
+                fit_params = {
+                    "sample_weight": np.array([sample_ratio if y == 1 else 1.0 for y in y_train])
+                }
 
             grid = grid_search.GridSearchCV(estimator,
                                             param_grid,
