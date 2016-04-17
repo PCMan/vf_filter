@@ -56,13 +56,6 @@ def main():
     x_data, y_data, x_info = load_data(n_jobs)
     print("Summary:\n", "# of segments:", len(x_data), "# of VT/Vf:", np.sum(y_data), len(x_info))
 
-    # build different class weights
-    class_weights = None
-    if args.balanced_weight:
-        n_vf = np.sum(y_data)
-        max_weight = (len(y_data) - n_vf) / n_vf  # non-vf/vf ratio
-        class_weights = [{0:1, 1:w} for w in np.linspace(1.0, max_weight * 1.5, 6)]
-
     # only select the specified feature
     if selected_features:
         x_data = x_data[:, selected_features]
@@ -73,43 +66,33 @@ def main():
 
     # build estimators to test
     estimator_name = args.model
-    model = None
-    param_names = []
+    estimator = None
+    param_grid = None
+    support_class_weight = False
     if estimator_name == "logistic_regression":
-        model = linear_model.LogisticRegressionCV(scoring=cv_scorer,
-                                                  n_jobs=n_jobs,
-                                                  cv=n_cv_folds)
+        estimator = linear_model.LogisticRegression()
+        param_grid = {
+            "C": np.logspace(-4, 4, 10)
+        }
+        support_class_weight = True
     elif estimator_name == "random_forest":
         estimator = ensemble.RandomForestClassifier()
         param_grid = {
             "n_estimators": list(range(10, 110, 10))
         }
-        if class_weights:
-            param_grid["class_weight"] = class_weights
-        model = grid_search.GridSearchCV(estimator, param_grid,
-                                        scoring=cv_scorer,
-                                        n_jobs=n_jobs, cv=n_cv_folds, verbose=0)
-        param_names = param_grid.keys()
+        support_class_weight = True
     elif estimator_name == "gradient_boosting":
         estimator = ensemble.GradientBoostingClassifier(learning_rate=0.1)
         param_grid = {
             "n_estimators": list(range(150, 250, 10)),
             "max_depth": list(range(3, 8))
         }
-        model = grid_search.GridSearchCV(estimator, param_grid,
-                                        scoring=cv_scorer,
-                                        n_jobs=n_jobs, cv=n_cv_folds, verbose=0)
-        param_names = param_grid.keys()
     elif estimator_name == "adaboost":
         estimator = ensemble.AdaBoostClassifier()
         param_grid = {
             "n_estimators": list(range(30, 150, 10)),
             "learning_rate": np.logspace(-1, 0, 2)
         }
-        model = grid_search.GridSearchCV(estimator, param_grid,
-                                         scoring=cv_scorer,
-                                         n_jobs=n_jobs, cv=n_cv_folds, verbose=0)
-        param_names = param_grid.keys()
     elif estimator_name == "svc":
         estimator = svm.SVC(shrinking=False,
                             cache_size=2048,
@@ -119,24 +102,20 @@ def main():
             "C": np.logspace(0, 1, 2),
             "gamma": np.logspace(-2, -1, 2)
         }
-        if class_weights:
-            param_grid["class_weight"] = class_weights
-        model = grid_search.GridSearchCV(estimator, param_grid,
-                                         scoring=cv_scorer,
-                                         n_jobs=n_jobs,
-                                         cv=n_cv_folds,
-                                         verbose=0)
-        param_names = param_grid.keys()
+        support_class_weight = True
 
     # Run the selected test
     csv_fields = ["se", "sp", "ppv", "acc", "se(sp95)", "se(sp97)", "se(sp99)", "tp", "tn", "fp", "fn"]
-    csv_fields.extend(sorted(param_names))
+    csv_fields.extend(sorted(param_grid.keys()))
+    if support_class_weight:
+        csv_fields.append("class_weight")
+
     with open(args.output, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=csv_fields)
         writer.writeheader()
         # perform the test for many times
-        for iter in range(n_test_iters):
-            print(estimator_name, iter)
+        for it in range(n_test_iters):
+            print(estimator_name, it)
             row = {}
             # Here we split the indicies of the rows rather than the data array itself.
             x_train_idx, x_test_idx, y_train, y_test = cross_validation.train_test_split(x_indicies,
@@ -147,9 +126,31 @@ def main():
             x_test = x_data[x_test_idx]
             x_test_info = x_info[x_test_idx]
 
+            fit_params = None
+            # try to balance class weighting
+            if args.balanced_weight:
+                n_vf = np.sum(y_data)
+                sample_ratio = (len(y_data) - n_vf) / n_vf  # non-vf/vf ratio
+
+                if support_class_weight:  # use class weighting
+                    # build different class weights
+                    param_grid["class_weight"] = [{0: 1, 1: w} for w in np.linspace(1.0, sample_ratio * 1.5, 6)]
+                else:  # use sample weighting (fixed)
+                    fit_params = {
+                        "sample_weight": np.array([sample_ratio if y == 1 else 1.0 for y in y_train])
+                    }
+
+            grid = grid_search.GridSearchCV(estimator,
+                                            param_grid,
+                                            fit_params=fit_params,
+                                            scoring=cv_scorer,
+                                            n_jobs=n_jobs,
+                                            cv=n_cv_folds,
+                                            verbose=0)
+
             # perform the classification test
-            model.fit(x_train, y_train)
-            y_predict = model.predict(x_test)
+            grid.fit(x_train, y_train)
+            y_predict = grid.predict(x_test)
             result = ClassificationResult(y_test, y_predict)
             row["se"] = result.sensitivity
             row["sp"] = result.specificity
@@ -161,8 +162,8 @@ def main():
             row["fn"] = result.fn
 
             # prediction with probabilities
-            if hasattr(model, "predict_proba"):
-                y_predict_scores = model.predict_proba(x_test)[:, 1]
+            if hasattr(estimator, "predict_proba"):
+                y_predict_scores = grid.predict_proba(x_test)[:, 1]
                 false_pos_rate, true_pos_rate, thresholds = metrics.roc_curve(y_test, y_predict_scores)
                 # find sensitivity at 95% specificity
                 x = np.searchsorted(false_pos_rate, 0.05)
@@ -175,8 +176,7 @@ def main():
                 row["se(sp99)"] = true_pos_rate[x]
 
             # best parameters of grid search
-            if hasattr(model, "best_params_"):
-                row.update(model.best_params_)
+            row.update(grid.best_params_)
 
             print("  ", ", ".join(["{0}={1}".format(field, row[field]) for field in csv_fields]))
             writer.writerow(row)
