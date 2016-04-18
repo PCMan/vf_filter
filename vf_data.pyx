@@ -26,6 +26,19 @@ def get_records(db_name):
     return records
 
 
+
+cdef bint is_vf(rhythm_name):
+    return True if rhythm_name == "(VF" or rhythm_name == "(VFIB" else False
+
+
+cdef bint is_vt(rhythm_name):
+    return True if rhythm_name == "(VT" or rhythm_name == "(VFL" else False
+
+
+cdef bint is_shockable(rhythm_name):
+    return is_vf(rhythm_name) or is_vt(rhythm_name)
+
+
 class Segment:
     def __init__(self, record, int sampling_rate, signals, int begin_time):
         self.record = record
@@ -78,7 +91,7 @@ class Record:
         cdef int n_segments = int(np.floor(n_samples / segment_size))
         cdef list segments = []
 
-        annotations = self.annotations
+        cdef list annotations = self.annotations
         cdef int n_annotations = len(annotations)
         cdef int i_ann = 0, i_seg
         cdef bint in_vf_episode = False
@@ -108,7 +121,7 @@ class Record:
                             in_vf_episode = False
                             vf_end_time = ann.time
                             vf_duration += (vf_end_time - vf_begin_time)
-                        elif code == "+" and not rhythm_type.startswith("(V"):  # end of Vf found
+                        elif code == "+" and not is_shockable(rhythm_type):  # end of shockable rhythm found
                             in_vf_episode = False
                             vf_end_time = ann.time
                             vf_duration += (vf_end_time - vf_begin_time)
@@ -116,7 +129,7 @@ class Record:
                         if code == "[":  # begin of Vf found
                             segment.has_vf = in_vf_episode = True
                             vf_begin_time = ann.time
-                        elif code == "+" and rhythm_type.startswith("(V"):  # begin of Vf found
+                        elif code == "+" and is_shockable(rhythm_type):  # begin of shockable rhythm found
                             segment.has_vf = in_vf_episode = True
                             vf_begin_time = ann.time
 
@@ -154,61 +167,34 @@ class Record:
 
 # implement as a generator for ECG segments
 def load_all_segments():
-    segments_cache_name = "all_segments.dat"
     cdef double segment_duration = 8  # 8 sec per segment
     cdef bint loaded_from_cache = False
 
-    # load cached segments if they exist
-    try:
-        with open(segments_cache_name, "rb") as cache_file:
-            loaded_from_cache = True
-            while True:
-                segment = pickle.load(cache_file)
-                if segment:
-                    # only do feature extration for segments without artifacts
-                    if not segment.has_artifact:
-                        yield segment
-                else:
-                    break
-    except Exception:
-        pass
+    # mitdb and vfdb contain two channels, but we only use the first one here
+    # data source sampling rate:
+    # mitdb: 360 Hz
+    # vfdb, cudb: 250 Hz
+    output = open("summary.csv", "w")
+    output.write('"db", "record", "vf", "non-vf"\n')
+    for db_name in ("mitdb", "vfdb", "cudb"):
+        for record_name in get_records(db_name):
+            print(("read record:", db_name, record_name))
+            record = Record()
+            record.load(db_name, record_name)
+            # print("  sample rate:", record.sampling_rate, "# of samples:", len(record.signals), ", # of anns:", len(record.annotations))
 
-    if not loaded_from_cache:
-        try:
-            cache_file = open(segments_cache_name, "wb")
-        except Exception:
-            cache_file = None
+            segments = record.get_segments(segment_duration)
 
-        # mitdb and vfdb contain two channels, but we only use the first one here
-        # data source sampling rate:
-        # mitdb: 360 Hz
-        # vfdb, cudb: 250 Hz
-        output = open("summary.csv", "w")
-        output.write('"db", "record", "vf", "non-vf"\n')
-        for db_name in ("mitdb", "vfdb", "cudb"):
-            for record_name in get_records(db_name):
-                print(("read record:", db_name, record_name))
-                record = Record()
-                record.load(db_name, record_name)
-                # print("  sample rate:", record.sampling_rate, "# of samples:", len(record.signals), ", # of anns:", len(record.annotations))
+            n_vf = np.sum([1 if segment.has_vf else 0 for segment in segments])
+            n_non_vf = len(segments) - n_vf
+            output.write('"{0}","{1}",{2},{3}\n'.format(db_name, record_name, n_vf, n_non_vf))
+            print("  segments:", (n_vf + n_non_vf), "# of vf segments (label=1):", n_vf)
 
-                segments = record.get_segments(segment_duration)
-
-                n_vf = np.sum([1 if segment.has_vf else 0 for segment in segments])
-                n_non_vf = len(segments) - n_vf
-                output.write('"{0}","{1}",{2},{3}\n'.format(db_name, record_name, n_vf, n_non_vf))
-                print("  segments:", (n_vf + n_non_vf), "# of vf segments (label=1):", n_vf)
-
-                for segment in segments:
-                    if cache_file:  # cache the segment
-                        pickle.dump(segment, cache_file)
-                    if segment.has_artifact:  # exclude segments with artifacts
-                        continue
-                    yield segment
-        output.close()
-        if cache_file:
-            pickle.dump(None, cache_file)
-            cache_file.close()
+            for segment in segments:
+                if segment.has_artifact:  # exclude segments with artifacts
+                    continue
+                yield segment
+    output.close()
 
 
 def extract_features_job(object segment):
