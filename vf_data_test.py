@@ -21,11 +21,13 @@ def main():
     record.load("vfdb", "418")
     segments = record.get_segments()
     for segment in segments:
-        print(segment.begin_time, segment.has_vf)
-        if segment.begin_time == 156000:
-            vf_features.extract_features(segment.signals, segment.sampling_rate)
+        info = segment.info
+        print(info.begin_time, info.has_vf)
+        if info.begin_time == 156000:
+            vf_features.extract_features(info.signals, info.sampling_rate)
 
     return 0
+
 
 if __name__ == '__main__':
     main()

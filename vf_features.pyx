@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# coding: utf-8
 # This implements common VF related features reported in the literatures.
 # Felipe AA et al. 2014. Detection of Life-Threatening Arrhythmias Using Feature Selection and Support Vector Machines
 import pyximport; pyximport.install()  # use Cython
