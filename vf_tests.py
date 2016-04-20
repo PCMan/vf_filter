@@ -65,8 +65,6 @@ def main():
     if selected_features:
         x_data = x_data[:, selected_features]
 
-    # scale the features
-    preprocessing.scale(x_data, copy=False)
     x_indicies = list(range(0, len(x_data)))
 
     # build estimators to test
@@ -128,6 +126,10 @@ def main():
             x_train = x_data[x_train_idx]
             x_test = x_data[x_test_idx]
             x_test_info = x_info[x_test_idx]
+
+            # scale the features (NOTE: training and testing sets should be scaled separately.)
+            preprocessing.scale(x_train, copy=False)
+            preprocessing.scale(x_test, copy=False)
 
             fit_params = None
             # try to balance class weighting
