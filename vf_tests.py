@@ -2,11 +2,9 @@
 import pyximport; pyximport.install()
 import numpy as np
 from sklearn import preprocessing
-from sklearn import linear_model
 from sklearn import ensemble
 from sklearn import cross_validation
 from sklearn import metrics
-from sklearn import svm
 from sklearn import grid_search
 import vf_data
 from vf_features import load_features
@@ -74,7 +72,7 @@ def main():
     # parse command line arguments
     parser = argparse.ArgumentParser()
     # known estimators
-    estimator_names = ("logistic_regression", "random_forest", "adaboost", "gradient_boosting", "svc")
+    estimator_names = ("logistic_regression", "random_forest", "adaboost", "gradient_boosting", "svc", "mlp")
     parser.add_argument("-m", "--model", type=str, required=True, choices=estimator_names)
     parser.add_argument("-i", "--input", type=str, required=True)
     parser.add_argument("-o", "--output", type=str, required=True)
@@ -147,6 +145,7 @@ def main():
     param_grid = None
     support_class_weight = False
     if estimator_name == "logistic_regression":
+        from sklearn import linear_model
         estimator = linear_model.LogisticRegression(class_weight=class_weight)
         param_grid = {
             "C": np.logspace(-4, 4, 10)
@@ -171,6 +170,7 @@ def main():
             "learning_rate": np.logspace(-1, 0, 2)
         }
     elif estimator_name == "svc":
+        from sklearn import svm
         estimator = svm.SVC(shrinking=False,
                             cache_size=2048,
                             verbose=False,
@@ -181,6 +181,19 @@ def main():
             "gamma": np.logspace(-2, -1, 2)
         }
         support_class_weight = True
+    elif estimator_name == "mlp":  # multiple layer perceptron neural network
+        from sknn import mlp
+        layers = [
+            mlp.Layer(type="Tanh", units=100),
+            mlp.Layer("Softmax")
+        ]
+        estimator = mlp.Classifier(layers=layers,
+                                   n_iter=25)
+        param_grid = {
+            #"learning_rate": np.logspace(-4, 4, 10)
+            "learning_rate": (0.0001,)
+        }
+
 
     # Run the selected test
     csv_fields = ["se", "sp", "ppv", "acc", "se(sp95)", "se(sp97)", "se(sp99)", "tp", "tn", "fp", "fn"]
@@ -211,10 +224,11 @@ def main():
                 # perform sample weighting instead if the estimator does not support class weighting
                 n_vf = np.sum(y_data)
                 sample_ratio = (len(y_data) - n_vf) / n_vf  # non-vf/vf ratio
+                weight_arg = "sample_weight" if estimator_name != "mlp" else "w"
                 fit_params = {
-                    "sample_weight": np.array([sample_ratio if y == 1 else 1.0 for y in y_train])
+                    weight_arg: np.array([sample_ratio if y == 1 else 1.0 for y in y_train])
                 }
-
+                
             grid = grid_search.GridSearchCV(estimator,
                                             param_grid,
                                             fit_params=fit_params,
@@ -226,6 +240,9 @@ def main():
             # perform the classification test
             grid.fit(x_train, y_train)
             y_predict = grid.predict(x_test)
+            if estimator_name == "mlp":  # sknn has different format of output and it needs to be flatten into a 1d array.
+                y_predict = y_predict.flatten()
+
             result = ClassificationResult(y_test, y_predict)
             row["se"] = result.sensitivity
             row["sp"] = result.specificity
