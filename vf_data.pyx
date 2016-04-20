@@ -195,57 +195,18 @@ def load_all_segments():
     output.close()
 
 
-def extract_features_job(object segment):
-    cdef int segment_duration = 8  # 8 sec per segment
-    signals = segment.signals
-    info = segment.info
-    # resample to DEFAULT_SAMPLING_RATE as needed
-    if info.sampling_rate != DEFAULT_SAMPLING_RATE:
-        signals = scipy.signal.resample(signals, DEFAULT_SAMPLING_RATE * segment_duration)
+def load_data(features_file, labels_file):
+    x_data = []
+    x_data_info = []
+    y_data = []
+    with open(features_file, "rb") as f:
+        x_data = pickle.load(f)
 
-    cdef int n_samples = len(signals)
-    # TODO: try to use different segment size here? For ex: the last 3 seconds of signals
-    # signals = segment.signals[n_samples - 1 - int(3 * DEFAULT_SAMPLING_RATE):]
-    features = extract_features(signals, DEFAULT_SAMPLING_RATE)
-    label = 1 if info.has_vf else 0
-    print(info.record, info.begin_time, features, label)
-    return features, label, info.record, info.begin_time
+    with open(labels_file, "rb") as f:
+        x_data_info = pickle.load(f)
+        y_data = pickle.load(f)
 
-
-def load_data(int n_jobs):
-    features_cache_name = "features.dat"
-    x_info = []
-    # load cached features if they exist
-    try:
-        with open(features_cache_name, "rb") as f:
-            x_data = pickle.load(f)
-            y_data = pickle.load(f)
-            x_info = pickle.load(f)
-    except Exception:
-        # load segments and perform feature extraction
-        # here we use multiprocessing for speed up.
-        features = Parallel(n_jobs=n_jobs, verbose=5, backend="multiprocessing", max_nbytes=4096)(delayed(extract_features_job)(seg) for seg in load_all_segments())
-
-        # receive extracted features from the worker processes
-        x_data = []
-        y_data = []
-        for item in features:
-            (feature, label, record, begin_time) = item
-            x_data.append(feature)
-            y_data.append(label)
-            # store mapping of feature and the segment it's built from
-            x_info.append((record, begin_time))
-        x_data = np.array(x_data)
-        y_data = np.array(y_data)
-
-        # cache the data
-        try:
-            with open(features_cache_name, "wb") as f:
-                pickle.dump(x_data, f)
-                pickle.dump(y_data, f)
-                pickle.dump(x_info, f)
-        except Exception:
-            pass
-        print("features are extracted.")
-
-    return x_data, y_data, np.array(x_info)
+    x_data = np.array(x_data)
+    y_data = np.array(y_data)
+    x_data_info = np.array(x_data_info)
+    return x_data, y_data, x_data_info
