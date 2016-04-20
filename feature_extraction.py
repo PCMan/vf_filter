@@ -45,7 +45,6 @@ def main():
     parser.add_argument("-s", "--segment-duration", type=int, default=8)
     parser.add_argument("-r", "--sampling-rate", type=int, default=250)
     parser.add_argument("-j", "--jobs", type=int, default=-1)
-    # parser.add_argument("-m", "--label-method", type=int, default=-1)
     args = parser.parse_args()
 
     x_data_info = []

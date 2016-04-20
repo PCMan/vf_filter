@@ -17,10 +17,57 @@ import argparse
 
 
 # label the segment according to different problem definition
-def label_segment(segment_info):
-    if segment_info.terminating_rhythm == vf_data.RHYTHM_VF or segment_info.terminating_rhythm == vf_data.RHYTHM_VFL:
-        return 1
-    return 0
+label_methods_desc = """
+label methods:
+0: binary => terminated with VF: 1, others: 0
+1: binary => terminated with VF or VFL: 1, others: 0
+2: binary => terminated with VF or VFL or VT: 1, others: 0
+------------------------------------------
+3: binary => has VF: 1, others: 0
+4: binary => has VF or VFL: 1, others: 0
+5: binary => has VF or VFL or VT: 1, others: 0
+------------------------------------------
+TODO (not implemented):
+6: multi-class => VF+VFL: 1,VT: 2, others: 0
+7: multi-class => VF: 1, VFL+VT: 2, others: 0
+8: multi-class => VF: 1, VFL: 2, VT: 3, others: 0
+"""
+
+
+def make_label(info, label_method):
+    label = 0
+    if label_method == 0:
+        label = 1 if info.terminating_rhythm == vf_data.RHYTHM_VF else 0
+    elif label_method == 1:
+        label = 1 if (info.terminating_rhythm == vf_data.RHYTHM_VF or info.terminating_rhythm == vf_data.RHYTHM_VFL) else 0
+    elif label_method == 2:
+        label = 1 if (info.terminating_rhythm == vf_data.RHYTHM_VF or info.terminating_rhythm == vf_data.RHYTHM_VFL or info.terminating_rhythm == vf_data.RHYTHM_VT) else 0
+    if label_method == 3:
+        label = 1 if info.has_vf else 0
+    elif label_method == 4:
+        label = 1 if (info.has_vf or info.has_vfl) else 0
+    elif label_method == 5:
+        label = 1 if (info.has_vf or info.has_vfl or info.has_vt) else 0
+    """
+    elif label_method == 3:
+        if info.terminating_rhythm == vf_data.RHYTHM_VF or info.terminating_rhythm == vf_data.RHYTHM_VFL:
+            label = 1
+        elif info.terminating_rhythm == vf_data.RHYTHM_VT:
+            label = 2
+    elif label_method == 4:
+        if info.terminating_rhythm == vf_data.RHYTHM_VF:
+            label = 1
+        elif info.terminating_rhythm == vf_data.RHYTHM_VFL or info.terminating_rhythm == vf_data.RHYTHM_VT:
+            label = 2
+    elif label_method == 5:
+        if info.terminating_rhythm == vf_data.RHYTHM_VF:
+            label = 1
+        elif info.terminating_rhythm == vf_data.RHYTHM_VFL:
+            label = 2
+        elif info.terminating_rhythm == vf_data.RHYTHM_VT:
+            label = 3
+    """
+    return label
 
 
 def main():
@@ -38,6 +85,8 @@ def main():
     parser.add_argument("-p", "--test-percent", type=int, default=30)  # 30% test set size
     parser.add_argument("-b", "--balanced-weight", action="store_true")  # used balanced class weighting
     parser.add_argument("-f", "--features", type=int, nargs="+")  # feature selection
+    parser.add_argument("-l", "--label-method", type=int, default=0, help=label_methods_desc)
+    parser.add_argument("-x", "--exclude-noise", action="store_true", default=False)
     args = parser.parse_args()
 
     # setup testing parameters
@@ -66,16 +115,23 @@ def main():
         # cv_scorer = metrics.make_scorer(metrics.fbeta_score, beta=10.0)
 
     # load features
-    x_data, x_info = load_features(features_file=args.input)
+    x_data, x_info = load_features(args.input)
+
+    # exclude segments with noises if needed
+    if args.exclude_noise:
+        no_artifact_idx = np.array([i for i, info in enumerate(x_info) if not info.has_artifact])
+        x_data = x_data[no_artifact_idx, :]
+        x_info = x_info[no_artifact_idx]
+
     # label the data
-    y_data = np.array([label_segment(info) for info in x_info])
+    y_data = np.array([make_label(info, args.label_method) for info in x_info])
     print("Summary:\n", "# of segments:", len(x_data), "# of VT/Vf:", np.sum(y_data), len(x_info))
 
     # only select the specified feature
     if selected_features:
         x_data = x_data[:, selected_features]
 
-    x_indicies = list(range(0, len(x_data)))
+    x_indicies = list(range(len(x_data)))
 
     # build estimators to test
     estimator_name = args.model
@@ -175,7 +231,7 @@ def main():
             # prediction with probabilities
             if hasattr(estimator, "predict_proba"):
                 y_predict_scores = grid.predict_proba(x_test)[:, 1]
-                false_pos_rate, true_pos_rate, thresholds = metrics.roc_curve(y_test, y_predict_scores)
+                false_pos_rate, true_pos_rate, thresholds = metrics.roc_curve(y_test, y_predict_scores, pos_label=1)
                 # find sensitivity at 95% specificity
                 x = np.searchsorted(false_pos_rate, 0.05)
                 row["se(sp95)"] = true_pos_rate[x]

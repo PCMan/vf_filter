@@ -561,10 +561,4 @@ def load_features(features_file):
 
     x_data = np.array(x_data)
     x_data_info = np.array(x_data_info)
-    '''
-    # no_artifact_idx = [i for i, info in enumerate(x_data_info) if info.has_artifact == False]
-    x_data = x_data[no_artifact_idx]
-    y_data = y_data[no_artifact_idx]
-    x_data_info = x_data_info[no_artifact_idx]
-    '''
     return x_data, x_data_info

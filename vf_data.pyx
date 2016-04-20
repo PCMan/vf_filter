@@ -1,25 +1,16 @@
 #!/usr/bin/env python3
 import pyximport; pyximport.install()
 import numpy as np
-import scipy.signal
 import os
-from vf_features import extract_features
 import pickle
-from joblib import Parallel, delayed
-from joblib.pool import has_shareable_memory
 from array import array
 
 
-# constant values
-DEFAULT_SAMPLING_RATE = 250
-
 RHYTHM_NORMAL = 0
 RHYTHM_VF = 1
-RHYTHM_VT = 2
 RHYTHM_VFL = 3
-cdef int RHYTHM_ASYSTOLE = 4  # not used at the moment
-cdef int RHYTHM_NOISE = 5
-cdef int RHYTHM_UNKNOWN = 6
+RHYTHM_VT = 3
+RHYTHM_ASYSTOLE = 4  # not used at the moment
 
 
 # dataset_dir = os.path.join(os.path.dirname(__file__), "datasets")
@@ -98,15 +89,21 @@ class Record:
         cdef int n_annotations = len(annotations)
         cdef int i_ann = 0
         cdef bint has_transition = False, in_artifact = False
-        cdef int current_rrhythm = RHYTHM_NORMAL
+        cdef int current_rhythm = RHYTHM_NORMAL
         cdef int segment_begin, segment_end
         for segment_begin in range(0, n_samples, segment_size):
             # split the segment
             segment_end = segment_begin + segment_size
             segment_signals = self.signals[segment_begin:segment_end]
             segment_info = SegmentInfo(record=self.name, sampling_rate=self.sampling_rate, begin_time=segment_begin)
-            segment = Segment(info=segment_info, signals=segment_signals)
             segment_info.has_artifact = in_artifacts
+            if current_rhythm == RHYTHM_VF:
+                segment_info.has_vf = True
+            elif current_rhythm == RHYTHM_VFL:
+                segment_info.has_vfl = True
+            elif current_rhythm == RHYTHM_VT:
+                segment_info.has_vt = True
+
             # handle annotations belonging to this segment
             while i_ann < n_annotations:
                 ann = annotations[i_ann]
@@ -115,37 +112,36 @@ class Record:
                     rhythm_type = ann.rhythm_type
                     if code == "+":  # rhythm change detected
                         if rhythm_type.startswith("(NOISE"):
-                            in_artifacts = True
+                            segment_info.has_artifact = in_artifacts = True
                             # print(self.name, "NOISE found", ann.time)
                         else:
                             in_artifacts = False
                             has_transition = True
                             if rhythm_type == "(VF" or rhythm_type == "(VFIB":
-                                current_rrhythm = RHYTHM_VF
+                                current_rhythm = RHYTHM_VF
                                 segment_info.has_vf = True
                                 # print(self.name, "VF found", ann.time)
                             elif rhythm_type == "(VFL":
-                                current_rrhythm = RHYTHM_VFL
+                                current_rhythm = RHYTHM_VFL
                                 segment_info.has_vfl = True
                                 # print(self.name, "VFL found", ann.time)
                             elif rhythm_type == "(VT":
-                                current_rrhythm = RHYTHM_VT
-                                current_rrhythm = RHYTHM_NOISE
+                                current_rhythm = RHYTHM_VT
                                 segment_info.has_vt = True
                                 # print(self.name, "VT found", ann.time)
                             else:
-                                current_rrhythm = RHYTHM_NORMAL
+                                current_rhythm = RHYTHM_NORMAL
                                 # print(self.name, "NSR found", ann.time)
                     elif code == "[":  # begin of flutter/fibrillation found
                         # FIXME: some records in cudb only has [ and ] and do not distinguish VF and VFL
                         # Let's label all of them as VF at the moment
                         # print(self.name, "[ found", ann.time)
-                        current_rrhythm = RHYTHM_VF
+                        current_rhythm = RHYTHM_VF
                         segment_info.has_vf = True
                     elif code == "]":  # end of flutter/fibrillation found
                         # print(self.name, "] found", ann.time)
                         # print("end of VF/VFL", state)
-                        current_rrhythm = RHYTHM_NORMAL  # FIXME: is this correct?
+                        current_rhythm = RHYTHM_NORMAL  # FIXME: is this correct?
                     elif code == "!":  # ventricular flutter wave (this annotation is used by mitdb for V flutter beats)
                         segment_info.has_vfl = True
                     elif code == "|":  # isolated artifact
@@ -159,7 +155,8 @@ class Record:
                 else:
                     break
             # label of the segment as Vf only if Vf still persists at the end of the segment
-            segment_info.terminating_rhythm = current_rrhythm
+            segment_info.terminating_rhythm = current_rhythm
+            segment = Segment(info=segment_info, signals=segment_signals)
             yield segment  # generate a new segment instance
 
 
