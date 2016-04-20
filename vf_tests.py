@@ -87,6 +87,8 @@ def main():
     parser.add_argument("-f", "--features", type=int, nargs="+")  # feature selection
     parser.add_argument("-l", "--label-method", type=int, default=0, help=label_methods_desc)
     parser.add_argument("-x", "--exclude-noise", action="store_true", default=False)
+    all_db_names = ("mitdb", "vfdb", "cudb")
+    parser.add_argument("-d", "--db-names", type=str, nargs="+", choices=all_db_names, default=None)
     args = parser.parse_args()
 
     # setup testing parameters
@@ -122,6 +124,12 @@ def main():
         no_artifact_idx = np.array([i for i, info in enumerate(x_info) if not info.has_artifact])
         x_data = x_data[no_artifact_idx, :]
         x_info = x_info[no_artifact_idx]
+
+    # if we only want data from some specified databases
+    if args.db_names:
+        include_idx = [i for i, info in enumerate(x_info) if info.record.split("/")[0] in args.db_names]
+        x_data = x_data[include_idx, :]
+        x_info = x_info[include_idx]
 
     # label the data
     y_data = np.array([make_label(info, args.label_method) for info in x_info])
