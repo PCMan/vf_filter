@@ -195,7 +195,7 @@ def load_all_segments():
     output.close()
 
 
-def load_data(features_file, labels_file):
+def load_data(features_file, labels_file, exclude_artifact=True):
     x_data = []
     x_data_info = []
     y_data = []
@@ -209,4 +209,11 @@ def load_data(features_file, labels_file):
     x_data = np.array(x_data)
     y_data = np.array(y_data)
     x_data_info = np.array(x_data_info)
+
+    if exclude_artifact:
+        no_artifact_idx = [i for i, info in enumerate(x_data_info) if info.has_artifact == False]
+        x_data = x_data[no_artifact_idx]
+        y_data = y_data[no_artifact_idx]
+        x_data_info = x_data_info[no_artifact_idx]
+
     return x_data, y_data, x_data_info
