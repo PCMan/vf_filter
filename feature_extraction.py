@@ -60,7 +60,7 @@ def main():
         x_data.append(features)
 
     # write to output files
-    with open(args.feature_output, "wb") as f:
+    with open(args.output, "wb") as f:
         pickle.dump(x_data, f)
         pickle.dump(x_data_info, f)
 
