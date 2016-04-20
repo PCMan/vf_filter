@@ -184,14 +184,16 @@ def main():
     elif estimator_name == "mlp":  # multiple layer perceptron neural network
         from sknn import mlp
         layers = [
-            mlp.Layer(type="Tanh", units=100),
+            mlp.Layer(type="Tanh", name="hidden0"),
             mlp.Layer("Softmax")
         ]
         estimator = mlp.Classifier(layers=layers,
                                    n_iter=25)
         param_grid = {
-            #"learning_rate": np.logspace(-4, 4, 10)
-            "learning_rate": (0.0001,)
+            # "learning_rate": np.logspace(-4, 4, 10)
+            "learning_rate": (0.0001,),
+            "hidden0__units": np.linspace(60, 220, 20),
+            # "hidden0_type": ("Rectifier", "Sigmoid", "Tanh")
         }
 
 
@@ -228,7 +230,7 @@ def main():
                 fit_params = {
                     weight_arg: np.array([sample_ratio if y == 1 else 1.0 for y in y_train])
                 }
-                
+
             grid = grid_search.GridSearchCV(estimator,
                                             param_grid,
                                             fit_params=fit_params,
