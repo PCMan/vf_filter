@@ -184,18 +184,17 @@ def main():
     elif estimator_name == "mlp":  # multiple layer perceptron neural network
         from sknn import mlp
         layers = [
-            mlp.Layer(type="Tanh", name="hidden0"),
+            mlp.Layer(type="Tanh", name="hidden0", units=100),
             mlp.Layer("Softmax")
         ]
         estimator = mlp.Classifier(layers=layers,
                                    n_iter=25)
         param_grid = {
-            # "learning_rate": np.logspace(-4, 4, 10)
-            "learning_rate": (0.0001,),
-            "hidden0__units": np.linspace(60, 220, 20),
-            # "hidden0_type": ("Rectifier", "Sigmoid", "Tanh")
+            "learning_rate": np.logspace(-4, 1, 10),
+            "n_iter": [10, 25, 50, 100],
+            "hidden0__units": list(range(80, 220, 20)),
+            "hidden0_type": ("Rectifier", "Sigmoid", "Tanh")
         }
-
 
     # Run the selected test
     csv_fields = ["se", "sp", "ppv", "acc", "se(sp95)", "se(sp97)", "se(sp99)", "tp", "tn", "fp", "fn"]
