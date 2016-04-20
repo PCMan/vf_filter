@@ -8,6 +8,7 @@ import scipy.signal as signal
 import pyeeg  # calculate sample entropy
 import matplotlib.pyplot as plt
 from array import array  # python array with static types
+import pickle
 
 
 feature_names = ("TCSC", "TCI", "STE", "MEA", "PSR", "HILB", "VF", "M", "A2", "FM", "LZ", "SpEn", "MAV")
@@ -548,3 +549,22 @@ cpdef extract_features(object src_samples, int sampling_rate):
     features.append(mav)
 
     return features
+
+
+# load features from data file
+def load_features(features_file):
+    x_data = []
+    x_data_info = []
+    with open(features_file, "rb") as f:
+        x_data = pickle.load(f)
+        x_data_info = pickle.load(f)
+
+    x_data = np.array(x_data)
+    x_data_info = np.array(x_data_info)
+    '''
+    # no_artifact_idx = [i for i, info in enumerate(x_data_info) if info.has_artifact == False]
+    x_data = x_data[no_artifact_idx]
+    y_data = y_data[no_artifact_idx]
+    x_data_info = x_data_info[no_artifact_idx]
+    '''
+    return x_data, x_data_info

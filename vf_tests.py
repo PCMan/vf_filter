@@ -8,11 +8,19 @@ from sklearn import cross_validation
 from sklearn import metrics
 from sklearn import svm
 from sklearn import grid_search
-from vf_data import load_data
+import vf_data
+from vf_features import load_features
 from vf_eval import *
 import multiprocessing as mp
 import csv
 import argparse
+
+
+# label the segment according to different problem definition
+def label_segment(segment_info):
+    if segment_info.terminating_rhythm == vf_data.RHYTHM_VF or segment_info.terminating_rhythm == vf_data.RHYTHM_VFL:
+        return 1
+    return 0
 
 
 def main():
@@ -21,7 +29,7 @@ def main():
     # known estimators
     estimator_names = ("logistic_regression", "random_forest", "adaboost", "gradient_boosting", "svc")
     parser.add_argument("-m", "--model", type=str, required=True, choices=estimator_names)
-    parser.add_argument("-i", "--input", type=str, required=True, nargs=2, help="input data: <features_file> <labels_file>")
+    parser.add_argument("-i", "--input", type=str, required=True)
     parser.add_argument("-o", "--output", type=str, required=True)
     parser.add_argument("-j", "--jobs", type=int, default=-1)
     parser.add_argument("-t", "--iter", type=int, default=1)
@@ -58,7 +66,9 @@ def main():
         # cv_scorer = metrics.make_scorer(metrics.fbeta_score, beta=10.0)
 
     # load features
-    x_data, y_data, x_info = load_data(features_file=args.input[0], labels_file=args.input[1])
+    x_data, x_info = load_features(features_file=args.input)
+    # label the data
+    y_data = np.array([label_segment(info) for info in x_info])
     print("Summary:\n", "# of segments:", len(x_data), "# of VT/Vf:", np.sum(y_data), len(x_info))
 
     # only select the specified feature

@@ -6,7 +6,7 @@ from sklearn import feature_selection
 from sklearn import ensemble
 from sklearn import cross_validation
 from sklearn import svm
-from vf_data import load_data
+from vf_data import load_features
 from vf_features import feature_names
 import multiprocessing as mp
 from scipy.stats import pearsonr, spearmanr
@@ -18,7 +18,7 @@ N_JOBS = (mp.cpu_count() - 1) if mp.cpu_count() > 1 else 1
 def main():
 
     # load features
-    x_data, y_data, x_info = load_data(N_JOBS)
+    x_data, y_data, x_info = load_features(N_JOBS)
     print("Summary:\n", "# of segments:", len(x_data), "# of VT/Vf:", np.sum(y_data), len(x_info))
 
     '''

@@ -194,26 +194,3 @@ def load_all_segments():
                 yield segment
     output.close()
 
-
-def load_data(features_file, labels_file, exclude_artifact=True):
-    x_data = []
-    x_data_info = []
-    y_data = []
-    with open(features_file, "rb") as f:
-        x_data = pickle.load(f)
-
-    with open(labels_file, "rb") as f:
-        x_data_info = pickle.load(f)
-        y_data = pickle.load(f)
-
-    x_data = np.array(x_data)
-    y_data = np.array(y_data)
-    x_data_info = np.array(x_data_info)
-
-    if exclude_artifact:
-        no_artifact_idx = [i for i, info in enumerate(x_data_info) if info.has_artifact == False]
-        x_data = x_data[no_artifact_idx]
-        y_data = y_data[no_artifact_idx]
-        x_data_info = x_data_info[no_artifact_idx]
-
-    return x_data, y_data, x_data_info
