@@ -193,7 +193,7 @@ def main():
             "learning_rate": np.logspace(-4, 1, 10),
             "n_iter": [10, 25, 50, 100],
             "hidden0__units": list(range(80, 220, 20)),
-            "hidden0_type": ("Rectifier", "Sigmoid", "Tanh")
+            "hidden0__type": ("Rectifier", "Sigmoid", "Tanh")
         }
 
     # Run the selected test
