@@ -193,9 +193,9 @@ def main():
             "learning_rate": [0.0001],
             "regularize": ["l2"],  # , "dropout"],
             "n_iter": [25],
-            "hidden0__units": list(range(1, 4, 1)),
+            "hidden0__units": list(range(2, 4, 1)),
             "hidden0__type": ("Rectifier", "Tanh"),  # "Sigmoid"
-            "hidden1__units": list(range(1, 4, 1)),
+            "hidden1__units": list(range(2, 4, 1)),
             "hidden1__type": ("Rectifier", "Tanh")  # "Sigmoid"
         }
 
