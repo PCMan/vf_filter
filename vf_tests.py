@@ -190,9 +190,9 @@ def main():
         estimator = mlp.Classifier(layers=layers,
                                    n_iter=25)
         param_grid = {
-            "learning_rate": np.logspace(-4, 1, 10),
-            "n_iter": [10, 25, 50, 100],
-            "hidden0__units": list(range(80, 220, 20)),
+            "learning_rate": np.logspace(-4, -2, 10),
+            "n_iter": [25, 50],
+            "hidden0__units": list(range(80, 120, 20)),
             "hidden0__type": ("Rectifier", "Sigmoid", "Tanh")
         }
 
