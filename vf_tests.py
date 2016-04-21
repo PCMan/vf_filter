@@ -191,15 +191,16 @@ def main():
                                    n_iter=25)
         param_grid = {
             "learning_rate": np.logspace(-4, -3, 2),
-            "n_iter": [25, 50],
-            "hidden0__units": list(range(80, 120, 20)),
+            "regularize": ("l2", "dropout"),
+            "n_iter": [25],
+            "hidden0__units": list(range(10, 80, 10)),
             "hidden0__type": ("Rectifier", "Sigmoid", "Tanh")
         }
 
     # Run the selected test
     csv_fields = ["se", "sp", "ppv", "acc", "se(sp95)", "se(sp97)", "se(sp99)", "tp", "tn", "fp", "fn"]
     csv_fields.extend(sorted(param_grid.keys()))
-    with open(args.output, "w", newline="") as f:
+    with open(args.output, "w", newline="", buffering=1) as f:  # buffering=1 means line buffering
         writer = csv.DictWriter(f, fieldnames=csv_fields)
         writer.writeheader()
         # perform the test for many times
