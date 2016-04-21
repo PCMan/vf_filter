@@ -184,17 +184,19 @@ def main():
     elif estimator_name == "mlp":  # multiple layer perceptron neural network
         from sknn import mlp
         layers = [
-            mlp.Layer(type="Tanh", name="hidden0", units=100),
+            mlp.Layer(type="Tanh", name="hidden0"),
+            mlp.Layer(type="Tanh", name="hidden1"),
             mlp.Layer("Softmax")
         ]
-        estimator = mlp.Classifier(layers=layers,
-                                   n_iter=25)
+        estimator = mlp.Classifier(layers=layers)
         param_grid = {
-            "learning_rate": np.logspace(-4, -3, 2),
-            "regularize": ("l2", "dropout"),
+            "learning_rate": [0.0001],
+            "regularize": ["l2"],  # , "dropout"],
             "n_iter": [25],
-            "hidden0__units": list(range(10, 80, 10)),
-            "hidden0__type": ("Rectifier", "Sigmoid", "Tanh")
+            "hidden0__units": list(range(10, 50, 10)),
+            "hidden0__type": ("Rectifier", "Tanh"),  # "Sigmoid"
+            "hidden1__units": list(range(10, 50, 10)),
+            "hidden1__type": ("Rectifier", "Tanh")  # "Sigmoid"
         }
 
     # Run the selected test
