@@ -191,14 +191,14 @@ def main():
         estimator = mlp.Classifier(layers=layers)
         param_grid = {
             "learning_rate": [0.0001],
-            "regularize": ["l2"],  # , "dropout"],
-            "n_iter": [25],
-            "hidden0__units": list(range(2, 4, 1)),
-            "hidden0__type": ("Rectifier", "Tanh"),  # "Sigmoid"
-            "hidden1__units": list(range(2, 4, 1)),
-            "hidden1__type": ("Rectifier", "Tanh")  # "Sigmoid"
+            "regularize": [None, "l2"],  # , "dropout"],
+            "n_iter": [25, 30],
+            "hidden0__units": list(range(2, 6, 1)),
+            "hidden0__type": ["Tanh"],  # "Rectifier", "Sigmoid"
+            "hidden1__units": list(range(2, 6, 1)),
+            "hidden1__type": ["Tanh"]  # "Rectifier", "Sigmoid"
         }
-
+        
     # Run the selected test
     csv_fields = ["se", "sp", "ppv", "acc", "se(sp95)", "se(sp97)", "se(sp99)", "tp", "tn", "fp", "fn"]
     csv_fields.extend(sorted(param_grid.keys()))
