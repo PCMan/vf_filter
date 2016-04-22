@@ -198,7 +198,7 @@ def main():
             "hidden1__units": list(range(2, 6, 1)),
             "hidden1__type": ["Tanh"]  # "Rectifier", "Sigmoid"
         }
-        
+
     # Run the selected test
     csv_fields = ["se", "sp", "ppv", "acc", "se(sp95)", "se(sp97)", "se(sp99)", "tp", "tn", "fp", "fn"]
     csv_fields.extend(sorted(param_grid.keys()))

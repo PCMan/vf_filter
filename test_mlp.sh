@@ -13,7 +13,7 @@ case $HOST in
 	label=1
 	;;
 "csbb24")
-	label=1
+	label=3
 	;;
 "csbb25")
 	label=4
@@ -26,8 +26,20 @@ esac
 input_features="features/features_s8_r250.dat"
 for scoring in f1 accuracy precision;
 do
-	./vf_tests.py -b -i "$input_features" -t 20 -x -m mlp -l $label -c 5 -s $scoring -d vfdb mitdb -o "reports/mlp_2layer_cv5_"$scoring"_s8_label"$label"_exclude_cudb.csv"
+	output="reports/mlp_2layer_cv5_"$scoring"_s8_label"$label"_exclude_cudb.csv"
+	if [ ! -f "$output" ]; then
+		./vf_tests.py -b -i "$input_features" -t 20 -x -m mlp -l $label -c 5 -s $scoring -d vfdb mitdb -o "$output"
+	fi
+
 	if [ "$label" == "1" -o "$label" == "4" ]; then
-		./vf_tests.py -b -i "$input_features" -t 20 -x -m mlp -l $label -c 5 -s $scoring -o "reports/mlp_2layer_cv5_"$scoring"_s8_label"$label"_all_db.csv"
+		output="reports/mlp_2layer_cv5_"$scoring"_s8_label"$label"_all_db.csv"
+		if [ ! -f "$output" ]; then
+			./vf_tests.py -b -i "$input_features" -t 20 -x -m mlp -l $label -c 5 -s $scoring -o "$output"
+		fi
+	fi
+
+	output="reports/mlp_2layer_cv5_no_weight_"$scoring"_s8_label"$label"_exclude_cudb.csv"
+	if [ ! -f "$output" ]; then
+		./vf_tests.py -i "$input_features" -t 20 -x -m mlp -l $label -c 5 -s $scoring -d vfdb mitdb -o "$output"
 	fi
 done
