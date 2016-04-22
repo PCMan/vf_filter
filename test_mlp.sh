@@ -24,22 +24,32 @@ case $HOST in
 esac
 
 input_features="features/features_s8_r250.dat"
+iter=20
 for scoring in f1 accuracy precision;
 do
-	output="reports/mlp_2layer_cv5_"$scoring"_s8_label"$label"_exclude_cudb.csv"
+	# 1 hidden layer
+	output="reports/mlp1_cv5_"$scoring"_s8_label"$label"_exclude_cudb.csv"
 	if [ ! -f "$output" ]; then
-		./vf_tests.py -b -i "$input_features" -t 20 -x -m mlp -l $label -c 5 -s $scoring -d vfdb mitdb -o "$output"
+		./vf_tests.py -b -i "$input_features" -t $iter -x -m mlp1 -l $label -c 5 -s $scoring -d vfdb mitdb -o "$output"
 	fi
 
 	if [ "$label" == "1" -o "$label" == "4" ]; then
-		output="reports/mlp_2layer_cv5_"$scoring"_s8_label"$label"_all_db.csv"
+		output="reports/mlp1_cv5_"$scoring"_s8_label"$label"_all_db.csv"
 		if [ ! -f "$output" ]; then
-			./vf_tests.py -b -i "$input_features" -t 20 -x -m mlp -l $label -c 5 -s $scoring -o "$output"
+			./vf_tests.py -b -i "$input_features" -t $iter -x -m mlp1 -l $label -c 5 -s $scoring -o "$output"
 		fi
 	fi
 
-	output="reports/mlp_2layer_cv5_no_weight_"$scoring"_s8_label"$label"_exclude_cudb.csv"
+	# 2 hidden layers
+	output="reports/mlp2_cv5_"$scoring"_s8_label"$label"_exclude_cudb.csv"
 	if [ ! -f "$output" ]; then
-		./vf_tests.py -i "$input_features" -t 20 -x -m mlp -l $label -c 5 -s $scoring -d vfdb mitdb -o "$output"
+		./vf_tests.py -b -i "$input_features" -t $iter -x -m mlp2 -l $label -c 5 -s $scoring -d vfdb mitdb -o "$output"
+	fi
+
+	if [ "$label" == "1" -o "$label" == "4" ]; then
+		output="reports/mlp2_cv5_"$scoring"_s8_label"$label"_all_db.csv"
+		if [ ! -f "$output" ]; then
+			./vf_tests.py -b -i "$input_features" -t $iter -x -m mlp2 -l $label -c 5 -s $scoring -o "$output"
+		fi
 	fi
 done

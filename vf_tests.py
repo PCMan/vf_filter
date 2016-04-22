@@ -202,7 +202,7 @@ def main():
         # add the output layer
         layers.append(mlp.Layer("Softmax"))
         estimator = mlp.Classifier(layers=layers)
-        
+
     # Run the selected test
     csv_fields = ["se", "sp", "ppv", "acc", "se(sp95)", "se(sp97)", "se(sp99)", "tp", "tn", "fp", "fn"]
     csv_fields.extend(sorted(param_grid.keys()))
