@@ -232,7 +232,7 @@ def main():
                 # perform sample weighting instead if the estimator does not support class weighting
                 n_vf = np.sum(y_data)
                 sample_ratio = (len(y_data) - n_vf) / n_vf  # non-vf/vf ratio
-                weight_arg = "sample_weight" if estimator_name != "mlp" else "w"
+                weight_arg = "w" if estimator_name.startswith("mlp") else "sample_weight"
                 fit_params = {
                     weight_arg: np.array([sample_ratio if y == 1 else 1.0 for y in y_train])
                 }
@@ -248,7 +248,7 @@ def main():
             # perform the classification test
             grid.fit(x_train, y_train)
             y_predict = grid.predict(x_test)
-            if estimator_name == "mlp":  # sknn has different format of output and it needs to be flatten into a 1d array.
+            if estimator_name.startswith("mlp"):  # sknn has different format of output and it needs to be flatten into a 1d array.
                 y_predict = y_predict.flatten()
 
             result = ClassificationResult(y_test, y_predict)
