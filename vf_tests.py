@@ -72,7 +72,7 @@ def main():
     # parse command line arguments
     parser = argparse.ArgumentParser()
     # known estimators
-    estimator_names = ("logistic_regression", "random_forest", "adaboost", "gradient_boosting", "svc", "mlp")
+    estimator_names = ("logistic_regression", "random_forest", "adaboost", "gradient_boosting", "svc", "mlp1", "mlp2")
     parser.add_argument("-m", "--model", type=str, required=True, choices=estimator_names)
     parser.add_argument("-i", "--input", type=str, required=True)
     parser.add_argument("-o", "--output", type=str, required=True)
@@ -181,24 +181,28 @@ def main():
             "gamma": np.logspace(-2, -1, 2)
         }
         support_class_weight = True
-    elif estimator_name == "mlp":  # multiple layer perceptron neural network
+    elif estimator_name == "mlp1" or estimator_name == "mlp2":  # multiple layer perceptron neural network
         from sknn import mlp
-        layers = [
-            mlp.Layer(type="Tanh", name="hidden0"),
-            mlp.Layer(type="Tanh", name="hidden1"),
-            mlp.Layer("Softmax")
-        ]
-        estimator = mlp.Classifier(layers=layers)
         param_grid = {
             "learning_rate": [0.0001],
-            "regularize": [None, "l2"],  # , "dropout"],
-            "n_iter": [25, 30],
-            "hidden0__units": list(range(2, 6, 1)),
-            "hidden0__type": ["Tanh"],  # "Rectifier", "Sigmoid"
-            "hidden1__units": list(range(2, 6, 1)),
-            "hidden1__type": ["Tanh"]  # "Rectifier", "Sigmoid"
+            "regularize": ["l2"],  # , "dropout"],
+            "weight_decay": np.logspace(-6, -4, 3),  # parameter for L2 regularizer
+            "hidden0__type": ["Tanh"]  # "Rectifier", "Sigmoid"
         }
 
+        layers = [mlp.Layer(type="Tanh", name="hidden0")]
+        # add the second hidden layer as needed
+        if estimator_name == "mlp2":  # 2 hidden layer
+            layers.append(mlp.Layer(type="Tanh", name="hidden1"))
+            param_grid["hidden0__units"] = list(range(2, 6, 1))
+            param_grid["hidden1__units"] = list(range(2, 6, 1))
+            param_grid["hidden1__type"] = ["Tanh"]  # "Rectifier", "Sigmoid"
+        else:
+            param_grid["hidden0__units"] = list(range(2, 26, 1))
+        # add the output layer
+        layers.append(mlp.Layer("Softmax"))
+        estimator = mlp.Classifier(layers=layers)
+        
     # Run the selected test
     csv_fields = ["se", "sp", "ppv", "acc", "se(sp95)", "se(sp97)", "se(sp99)", "tp", "tn", "fp", "fn"]
     csv_fields.extend(sorted(param_grid.keys()))
