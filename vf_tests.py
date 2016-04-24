@@ -186,7 +186,7 @@ def main():
         param_grid = {
             "learning_rate": [0.0001],
             "regularize": ["l2"],  # , "dropout"],
-            "weight_decay": np.logspace(-6, -4, 3),  # parameter for L2 regularizer
+            "weight_decay": np.logspace(-6, -5, 2),  # parameter for L2 regularizer
             "hidden0__type": ["Tanh"]  # "Rectifier", "Sigmoid"
         }
 
@@ -194,14 +194,14 @@ def main():
         # add the second hidden layer as needed
         if estimator_name == "mlp2":  # 2 hidden layer
             layers.append(mlp.Layer(type="Tanh", name="hidden1"))
-            param_grid["hidden0__units"] = list(range(2, 6, 1))
-            param_grid["hidden1__units"] = list(range(2, 6, 1))
+            param_grid["hidden0__units"] = list(range(2, 5, 1))
+            param_grid["hidden1__units"] = list(range(2, 5, 1))
             param_grid["hidden1__type"] = ["Tanh"]  # "Rectifier", "Sigmoid"
         else:
-            param_grid["hidden0__units"] = list(range(2, 26, 1))
+            param_grid["hidden0__units"] = list(range(5, 26, 1))
         # add the output layer
         layers.append(mlp.Layer("Softmax"))
-        estimator = mlp.Classifier(layers=layers)
+        estimator = mlp.Classifier(layers=layers, batch_size=150)
 
     # Run the selected test
     csv_fields = ["se", "sp", "ppv", "acc", "se(sp95)", "se(sp97)", "se(sp99)", "tp", "tn", "fp", "fn"]
