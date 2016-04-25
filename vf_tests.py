@@ -35,34 +35,34 @@ TODO (not implemented):
 def make_label(info, label_method):
     label = 0
     if label_method == 0:
-        label = 1 if info.terminating_rhythm == vf_data.RHYTHM_VF else 0
+        label = 1 if info.terminating_rhythm == "(VF" else 0
     elif label_method == 1:
-        label = 1 if (info.terminating_rhythm == vf_data.RHYTHM_VF or info.terminating_rhythm == vf_data.RHYTHM_VFL) else 0
+        label = 1 if (info.terminating_rhythm == "(VF" or info.terminating_rhythm == "(VFL") else 0
     elif label_method == 2:
-        label = 1 if (info.terminating_rhythm == vf_data.RHYTHM_VF or info.terminating_rhythm == vf_data.RHYTHM_VFL or info.terminating_rhythm == vf_data.RHYTHM_VT) else 0
+        label = 1 if (info.terminating_rhythm == "(VF" or info.terminating_rhythm == "(VFL" or info.terminating_rhythm == "(VT") else 0
     if label_method == 3:
-        label = 1 if info.has_vf else 0
+        label = 1 if info.has_rhythm("(VF") else 0
     elif label_method == 4:
-        label = 1 if (info.has_vf or info.has_vfl) else 0
+        label = 1 if (info.has_rhythm("(VF") or info.has_rhythm("(VFL")) else 0
     elif label_method == 5:
-        label = 1 if (info.has_vf or info.has_vfl or info.has_vt) else 0
+        label = 1 if (info.has_rhythm("(VF") or info.has_rhythm("(VFL") or info.has_rhythm("(VT")) else 0
     """
     elif label_method == 3:
-        if info.terminating_rhythm == vf_data.RHYTHM_VF or info.terminating_rhythm == vf_data.RHYTHM_VFL:
+        if info.terminating_rhythm == "(VF" or info.terminating_rhythm == "(VFL":
             label = 1
-        elif info.terminating_rhythm == vf_data.RHYTHM_VT:
+        elif info.terminating_rhythm == "(VT":
             label = 2
     elif label_method == 4:
-        if info.terminating_rhythm == vf_data.RHYTHM_VF:
+        if info.terminating_rhythm == "(VF":
             label = 1
-        elif info.terminating_rhythm == vf_data.RHYTHM_VFL or info.terminating_rhythm == vf_data.RHYTHM_VT:
+        elif info.terminating_rhythm == "(VFL" or info.terminating_rhythm == "(VT":
             label = 2
     elif label_method == 5:
-        if info.terminating_rhythm == vf_data.RHYTHM_VF:
+        if info.terminating_rhythm == "(VF":
             label = 1
-        elif info.terminating_rhythm == vf_data.RHYTHM_VFL:
+        elif info.terminating_rhythm == "(VFL":
             label = 2
-        elif info.terminating_rhythm == vf_data.RHYTHM_VT:
+        elif info.terminating_rhythm == "(VT":
             label = 3
     """
     return label

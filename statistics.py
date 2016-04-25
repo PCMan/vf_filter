@@ -53,12 +53,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--db-names", type=str, nargs="+", choices=all_db_names, default=all_db_names)
     # parser.add_argument("-o", "--output", type=str)
+    parser.add_argument("-x", "--exclude-noise", action="store_true", default=False)
     parser.add_argument("-s", "--segment-duration", type=int, default=8)
     args = parser.parse_args()
 
-    n_vf = 0
-    n_vt = 0
-    n_vfl = 0
+    n_segments = 0
     all_rhythm_statistics = {}
     for db_name in args.db_names:
         print(db_name)
@@ -69,31 +68,28 @@ def main():
             record.load(db_name, record_name)
             for segment in record.get_segments(args.segment_duration):
                 info = segment.info
-                if info.has_artifact:
+                if args.exclude_noise and info.has_artifact:
                     continue
-                print(info.record, info.begin_time, info.rhythm_types)
+                # print(info.record, info.begin_time, info.rhythm_types)
                 for rhythm_name in info.rhythm_types:
                     rhythm_statistics[rhythm_name] = rhythm_statistics.get(rhythm_name, 0) + 1
-                if info.has_vf:
-                    n_vf += 1
-                if info.has_vt:
-                    n_vt += 1
-                if info.has_vfl:
-                    n_vfl += 1
+                n_segments += 1
 
         for name in sorted(rhythm_statistics.keys()):
             desc = rhythm_names.get(name, name)
             n = rhythm_statistics.get(name)
             print(name, "\t", n, "\t", desc)
             all_rhythm_statistics[name] = all_rhythm_statistics.get(name, 0) + n
-        print("-----")
+        print("-" * 80)
 
     print("Summary:")
+    n_rhythms = 0
     for name in sorted(all_rhythm_statistics.keys()):
         desc = rhythm_names.get(name, name)
         n = all_rhythm_statistics.get(name)
         print(name, "\t", n, "\t", desc)
-    print("VF:", n_vf, ", VFL:", n_vfl, ", VT:", n_vt)
+        n_rhythms += n
+    print("\t", n_segments - n_rhythms, "\tUnknown rhythm")
 
 
 if __name__ == "__main__":
