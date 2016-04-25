@@ -25,7 +25,7 @@ esac
 
 input_features="features/features_s8_r250.dat"
 iter=20
-for scoring in f1 accuracy precision;
+for scoring in ber f1 accuracy precision;
 do
 	# 1 hidden layer
 	output="reports/mlp1_cv5_"$scoring"_s8_label"$label"_exclude_cudb.csv"
