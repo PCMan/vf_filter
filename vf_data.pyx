@@ -8,7 +8,7 @@ from array import array
 
 RHYTHM_NORMAL = 0
 RHYTHM_VF = 1
-RHYTHM_VFL = 3
+RHYTHM_VFL = 2
 RHYTHM_VT = 3
 RHYTHM_ASYSTOLE = 4  # not used at the moment
 
@@ -38,6 +38,7 @@ class SegmentInfo:
         self.has_vfl = False
         self.has_vt = False
         self.terminating_rhythm = RHYTHM_NORMAL
+        self.rhythm_types = set()
 
 
 class Segment:
@@ -52,6 +53,13 @@ class Annotation:
         self.code = code
         self.sub_type = sub_type
         self.rhythm_type = rhythm_type
+
+    def get_rhythm_type(self):
+        if self.rhythm_type == "(VFIB":
+            return "(VF"
+        elif self.rhythm_type == "(AFIB":
+            return "(AF"
+        return self.rhythm_type
 
 
 class Record:
@@ -91,6 +99,7 @@ class Record:
         cdef bint has_transition = False, in_artifact = False
         cdef int current_rhythm = RHYTHM_NORMAL
         cdef int segment_begin, segment_end
+        rhythm_type = ""
         for segment_begin in range(0, n_samples, segment_size):
             # split the segment
             segment_end = segment_begin + segment_size
@@ -104,20 +113,26 @@ class Record:
             elif current_rhythm == RHYTHM_VT:
                 segment_info.has_vt = True
 
+            if rhythm_type:
+                segment_info.rhythm_types.add(rhythm_type)
+
             # handle annotations belonging to this segment
             while i_ann < n_annotations:
                 ann = annotations[i_ann]
                 if ann.time < segment_end:
                     code = ann.code
-                    rhythm_type = ann.rhythm_type
+                    aux = ann.get_rhythm_type()
                     if code == "+":  # rhythm change detected
+                        rhythm_type = aux
+                        if rhythm_type:
+                            segment_info.rhythm_types.add(rhythm_type)
                         if rhythm_type.startswith("(NOISE"):
                             segment_info.has_artifact = in_artifacts = True
                             # print(self.name, "NOISE found", ann.time)
                         else:
                             in_artifacts = False
                             has_transition = True
-                            if rhythm_type == "(VF" or rhythm_type == "(VFIB":
+                            if rhythm_type == "(VF":
                                 current_rhythm = RHYTHM_VF
                                 segment_info.has_vf = True
                                 # print(self.name, "VF found", ann.time)
@@ -137,13 +152,17 @@ class Record:
                         # Let's label all of them as VF at the moment
                         # print(self.name, "[ found", ann.time)
                         current_rhythm = RHYTHM_VF
+                        rhythm_type = "(VF"
+                        segment_info.rhythm_types.add(rhythm_type)
                         segment_info.has_vf = True
                     elif code == "]":  # end of flutter/fibrillation found
                         # print(self.name, "] found", ann.time)
                         # print("end of VF/VFL", state)
                         current_rhythm = RHYTHM_NORMAL  # FIXME: is this correct?
+                        rhythm_type = ""
                     elif code == "!":  # ventricular flutter wave (this annotation is used by mitdb for V flutter beats)
                         segment_info.has_vfl = True
+                        segment_info.rhythm_types.add("(VFL")
                     elif code == "|":  # isolated artifact
                         segment_info.has_artifact = True
                     elif code == "~":  # change in quality
