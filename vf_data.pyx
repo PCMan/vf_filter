@@ -72,19 +72,23 @@ class Segment:
                 #     print("Fine VF")
 
 
+rhythm_alias = {
+    "(VFIB": "(VF",
+    "(AFIB": "(AF",
+    "(NSR": "(N",
+    "(PM": "(P"
+}
+
+
 class Annotation:
-    def __init__(self, int time, code, sub_type, rhythm_type) -> object:
+    def __init__(self, int time, str code, int sub_type, str rhythm_type) -> object:
         self.time = time
         self.code = code
         self.sub_type = sub_type
         self.rhythm_type = rhythm_type
 
     def get_rhythm_type(self):
-        if self.rhythm_type == "(VFIB":
-            return "(VF"
-        elif self.rhythm_type == "(AFIB":
-            return "(AF"
-        return self.rhythm_type
+        return rhythm_alias.get(self.rhythm_type, self.rhythm_type)
 
 
 class Record:
@@ -95,7 +99,7 @@ class Record:
         self.sampling_rate = 0
         self.gain = 0
 
-    def load(self, db_name, record):
+    def load(self, str db_name, str record):
         record_name = "{0}/{1}".format(db_name, record)
         self.name = record_name
 
