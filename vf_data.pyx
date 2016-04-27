@@ -47,7 +47,7 @@ class SegmentInfo:
         return len(self.rhythms) > 1
 
     def get_terminating_rhythm(self):
-        return self.rhythms[-1] if self.rhythms else ""
+        return self.rhythms[-1].name if self.rhythms else ""
 
 
 class Segment:

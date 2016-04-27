@@ -25,48 +25,47 @@ label methods:
 4: binary => has VF or VFL: 1, others: 0
 5: binary => has VF or VFL or VT: 1, others: 0
 ------------------------------------------
-TODO (not implemented):
-6: multi-class => VF+VFL: 1,VT: 2, others: 0
-7: multi-class => VF: 1, VFL+VT: 2, others: 0
-8: multi-class => VF: 1, VFL: 2, VT: 3, others: 0
+6: AHA multi-class:
+  shockable: coarse VF + rapid VT: 1
+  intermediate: fine VF, other VT: 2
+  non-shockable: others (especially asystole): 0
 """
 
 
 def make_label(info, label_method):
     label = 0
     if label_method == 0:
-        label = 1 if info.terminating_rhythm == "(VF" else 0
+        label = 1 if info.get_terminating_rhythm() == "(VF" else 0
     elif label_method == 1:
-        label = 1 if (info.terminating_rhythm == "(VF" or info.terminating_rhythm == "(VFL") else 0
+        label = 1 if info.get_terminating_rhythm() in ("(VF", "(VFL") else 0
     elif label_method == 2:
-        label = 1 if (info.terminating_rhythm == "(VF" or info.terminating_rhythm == "(VFL" or info.terminating_rhythm == "(VT") else 0
+        label = 1 if info.get_terminating_rhythm() in ("(VF", "(VFL", "(VT") else 0
     if label_method == 3:
         label = 1 if info.has_rhythm("(VF") else 0
     elif label_method == 4:
         label = 1 if (info.has_rhythm("(VF") or info.has_rhythm("(VFL")) else 0
     elif label_method == 5:
         label = 1 if (info.has_rhythm("(VF") or info.has_rhythm("(VFL") or info.has_rhythm("(VT")) else 0
-    """
-    elif label_method == 3:
-        if info.terminating_rhythm == "(VF" or info.terminating_rhythm == "(VFL":
-            label = 1
-        elif info.terminating_rhythm == "(VT":
-            label = 2
-    elif label_method == 4:
-        if info.terminating_rhythm == "(VF":
-            label = 1
-        elif info.terminating_rhythm == "(VFL" or info.terminating_rhythm == "(VT":
-            label = 2
-    elif label_method == 5:
-        if info.terminating_rhythm == "(VF":
-            label = 1
-        elif info.terminating_rhythm == "(VFL":
-            label = 2
-        elif info.terminating_rhythm == "(VT":
-            label = 3
-    """
-    return label
 
+    # multi-class based on AHA guideline
+    if label_method == 6:
+        term_rhythm = info.get_terminating_rhythm()
+        if term_rhythm == "(VF":  # distinguish coarse VF from fine VF
+            # warning: in cudb, VF and VFL are mixed together and it's not possible to label them seprately.
+            if info.rhythms[-1].is_coarse:  # if this is coarse VF
+                label = 1  # shockable
+            else:
+                label = 2  # intermediate
+        elif term_rhythm == "(VFL":  # We define VFL as rapid VT here.
+            # VT at 240-300 beats/min is often termed ventricular flutter.
+            # http://emedicine.medscape.com/article/159075-overview
+            label = 1
+        elif term_rhythm == "(VT":
+            label = 2
+        else:  # others
+            label = 0
+
+    return label
 
 def main():
     # parse command line arguments
@@ -78,7 +77,7 @@ def main():
     parser.add_argument("-o", "--output", type=str, required=True)
     parser.add_argument("-j", "--jobs", type=int, default=-1)
     parser.add_argument("-t", "--iter", type=int, default=1)
-    parser.add_argument("-s", "--scorer", type=str, choices=("ber", "f1", "accuracy", "precision"), default="ber")
+    parser.add_argument("-s", "--scorer", type=str, choices=("ber", "f1", "accuracy", "precision", "f1_weighted"), default="ber")
     parser.add_argument("-c", "--cv-fold", type=int, default=10)  # 10 fold CV by default
     parser.add_argument("-p", "--test-percent", type=int, default=30)  # 30% test set size
     parser.add_argument("-b", "--balanced-weight", action="store_true")  # used balanced class weighting
@@ -250,6 +249,10 @@ def main():
             y_predict = grid.predict(x_test)
             if estimator_name.startswith("mlp"):  # sknn has different format of output and it needs to be flatten into a 1d array.
                 y_predict = y_predict.flatten()
+
+            if args.label_method >= 6:  # multi-class
+                print(metrics.classification_report(y_true=y_test, y_pred=y_predict, target_names=("non-shockable", "shockable", "intermediate")))
+                continue  # saving to csv report is not yet supported
 
             result = ClassificationResult(y_test, y_predict)
             row["se"] = result.sensitivity
