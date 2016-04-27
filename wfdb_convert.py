@@ -22,12 +22,16 @@ def get_records(db_name):
 
 def main():
     data_dir = "datasets"
-    for db_name in ("mitdb", "vfdb", "cudb"):
+    for db_name in ("mitdb", "vfdb", "cudb", "edb"):
         db_dir = os.path.join(data_dir, db_name)
         if not os.path.exists(db_dir):
             os.makedirs(db_dir)
 
         for record in get_records(db_name):
+            path = os.path.join(db_dir, record)
+            if os.path.exists(path):  # skip files that are already converted
+                continue
+
             print "read record:", db_name, record
             record_name = "{0}/{1}".format(db_name, record)
 
@@ -36,12 +40,14 @@ def main():
 
             # query sampling rate of the record
             sampling_rate = wfdb.sampfreq(record_name)
+            gain = wfdb.WFDB_DEFGAIN
 
             # read the signals
             sigInfo = (wfdb.WFDB_Siginfo * n_channels)()
             sample_buf = (wfdb.WFDB_Sample * n_channels)()
             signals = array("i")  # signed int
             if wfdb.isigopen(record_name, byref(sigInfo), n_channels) == n_channels:
+                gain = sigInfo[0].gain
                 while wfdb.getvec(byref(sample_buf)) > 0:
                     sample = sample_buf[0]  # we only want the first channel
                     signals.append(sample)
@@ -69,9 +75,8 @@ def main():
                         rhythm_type = cast(aux_ptr, c_char_p).value
                     annotations.append((time, code, sub_type, rhythm_type))
 
-            path = os.path.join(db_dir, record)
             with open(path, "wb") as f:
-                pickle.dump(sampling_rate, f, pickle.HIGHEST_PROTOCOL)
+                pickle.dump((sampling_rate, gain), f, pickle.HIGHEST_PROTOCOL)
                 pickle.dump(signals, f, pickle.HIGHEST_PROTOCOL)
                 pickle.dump(annotations, f, pickle.HIGHEST_PROTOCOL)
 
