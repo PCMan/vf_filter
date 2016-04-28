@@ -29,17 +29,21 @@ label methods:
   shockable: coarse VF + rapid VT: 1
   intermediate: fine VF, other VT: 2
   non-shockable: others (especially asystole): 0
+7: multi-class:
+  VF: 1
+  VFL/VT: 2
+  others: 0
 """
 
 
 def make_label(info, label_method):
     label = 0
     if label_method == 0:
-        label = 1 if info.get_terminating_rhythm() == "(VF" else 0
+        label = 1 if info.get_last_rhythm_name() == "(VF" else 0
     elif label_method == 1:
-        label = 1 if info.get_terminating_rhythm() in ("(VF", "(VFL") else 0
+        label = 1 if info.get_last_rhythm_name() in ("(VF", "(VFL") else 0
     elif label_method == 2:
-        label = 1 if info.get_terminating_rhythm() in ("(VF", "(VFL", "(VT") else 0
+        label = 1 if info.get_last_rhythm_name() in ("(VF", "(VFL", "(VT") else 0
     if label_method == 3:
         label = 1 if info.has_rhythm("(VF") else 0
     elif label_method == 4:
@@ -49,23 +53,36 @@ def make_label(info, label_method):
 
     # multi-class based on AHA guideline
     if label_method == 6:
-        term_rhythm = info.get_terminating_rhythm()
-        if term_rhythm == "(VF":  # distinguish coarse VF from fine VF
+        last_rhythm = info.get_last_rhythm()
+        if last_rhythm.name == "(VF":  # distinguish coarse VF from fine VF
             # warning: in cudb, VF and VFL are mixed together and it's not possible to label them seprately.
             if info.rhythms[-1].is_coarse:  # if this is coarse VF
                 label = 1  # shockable
             else:
-                label = 2  # intermediate
-        elif term_rhythm == "(VFL":  # We define VFL as rapid VT here.
+                label = 1  # intermediate
+        elif last_rhythm.name == "(VFL":  # We define VFL as rapid VT here.
             # VT at 240-300 beats/min is often termed ventricular flutter.
             # http://emedicine.medscape.com/article/159075-overview
+            label = 2
+        elif last_rhythm.name == "(VT":
+            label = 2
+        else:  # others
+            label = 0
+
+    # multi-class: VF, VFL/VT, others
+    if label_method == 7:
+        last_rhythm = info.get_last_rhythm_name()
+        if last_rhythm == "(VF":  # distinguish coarse VF from fine VF
             label = 1
-        elif term_rhythm == "(VT":
+        elif last_rhythm in ("(VT", "(VFL"):  # We define VFL as rapid VT here.
+            # VT at 240-300 beats/min is often termed ventricular flutter.
+            # http://emedicine.medscape.com/article/159075-overview
             label = 2
         else:  # others
             label = 0
 
     return label
+
 
 def main():
     # parse command line arguments
@@ -251,8 +268,8 @@ def main():
                 y_predict = y_predict.flatten()
 
             if args.label_method >= 6:  # multi-class
-                print(metrics.classification_report(y_true=y_test, y_pred=y_predict, target_names=("non-shockable", "shockable", "intermediate")))
-                continue  # saving to csv report is not yet supported
+                print(metrics.classification_report(y_true=y_test, y_pred=y_predict, target_names=["non-shockable", "shockable", "intermediate"]))
+                continue  # saving to csv report is not yet supported for multi-class problems
 
             result = ClassificationResult(y_test, y_predict)
             row["se"] = result.sensitivity

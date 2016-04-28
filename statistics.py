@@ -39,7 +39,7 @@ rhythm_name_tab = """
 (VT	Ventricular tachycardia
 """
 rhythm_descriptions = {}
-for line in rhythm_name_tab.split("\n"):
+for line in rhythm_name_tab.strip().split("\n"):
     cols = line.split("\t", maxsplit=1)
     if len(cols) > 1:
         name = cols[0].strip()
