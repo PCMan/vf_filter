@@ -35,8 +35,11 @@ rhythm_name_tab = """
 (SBR		Sinus bradycardia
 (SVTA		Supraventricular tachyarrhythmia
 (T		Ventricular trigeminy
-(VFL		Ventricular flutter
-(VT	Ventricular tachycardia
+(VT.r	Ventricular tachycardia (rapid)
+(VT.s	Ventricular tachycardia (slow)
+(VT.o	Ventricular tachycardia (other)
+(VF.c	ventricular fibrillation (coarse)
+(VF.f	ventricular fibrillation (fine)
 """
 rhythm_descriptions = {}
 for line in rhythm_name_tab.strip().split("\n"):
@@ -72,8 +75,23 @@ def main():
                 info = segment.info
                 if args.exclude_noise and info.has_artifact:
                     continue
+
                 # print(info.record, info.begin_time, info.rhythm_types)
                 for rhythm in info.rhythms:
+                    # distinguish subtypes of VT and VF
+                    if rhythm.name == "(VF":
+                        if rhythm.is_coarse:
+                            rhythm.name = "(VF.c"
+                        else:
+                            rhythm.name = "(VF.f"
+                    elif rhythm.name == "(VT":
+                        hr = rhythm.get_heart_rate()
+                        if hr == 0:
+                            rhythm.name = "(VT.o"
+                        elif hr > 100:
+                            rhythm.name = "(VT.r"
+                        else:
+                            rhythm.name = "(VT.s"
                     rhythm_statistics[rhythm.name] = rhythm_statistics.get(rhythm.name, 0) + 1
                     rhythms_of_the_record.add(rhythm.name)
                 n_segments += 1
