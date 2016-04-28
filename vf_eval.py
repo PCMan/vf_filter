@@ -139,8 +139,8 @@ class AHATest:
             if n_subtype == 1:
                 print("warning: number of samples in subtype is not enough")
                 continue
-            n_train = int(np.round(n_subtype * (1.0 - test_size)))  # training set
-            n_test = int(np.round(n_subtype * test_size))  # test set
+            n_test = int(np.floor(n_subtype * test_size))  # test set
+            n_train = n_subtype - n_test  # training set
             sub_y_data = self.y_data[subtype_idx]
             sub_x_train_idx, sub_x_test_idx, sub_y_train, sub_y_test = cross_validation.train_test_split(subtype_idx,
                                                                                                          sub_y_data,
