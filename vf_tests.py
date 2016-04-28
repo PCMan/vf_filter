@@ -106,7 +106,7 @@ def main():
     parser.add_argument("-f", "--features", type=int, nargs="+")  # feature selection
     parser.add_argument("-l", "--label-method", type=int, default=0, help=label_methods_desc)
     parser.add_argument("-x", "--exclude-noise", action="store_true", default=False)
-    all_db_names = ("mitdb", "vfdb", "cudb")
+    all_db_names = ("mitdb", "vfdb", "cudb", "edb")
     parser.add_argument("-d", "--db-names", type=str, nargs="+", choices=all_db_names, default=None)
     args = parser.parse_args()
 
