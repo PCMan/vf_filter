@@ -25,11 +25,7 @@ label methods:
 4: binary => has VF or VFL: 1, others: 0
 5: binary => has VF or VFL or VT: 1, others: 0
 ------------------------------------------
-6: AHA multi-class:
-  shockable: coarse VF + rapid VT: 1
-  intermediate: fine VF, other VT: 2
-  non-shockable: others (especially asystole): 0
-7: multi-class:
+6: multi-class:
   VF: 1
   VFL/VT: 2
   others: 0
@@ -51,31 +47,8 @@ def make_label(info, label_method):
     elif label_method == 5:
         label = 1 if (info.has_rhythm("(VF") or info.has_rhythm("(VFL") or info.has_rhythm("(VT")) else 0
 
-    # multi-class based on AHA guideline
-    if label_method == 6:
-        last_rhythm = info.get_last_rhythm()
-        if last_rhythm.name == "(VF":  # distinguish coarse VF from fine VF
-            # warning: in cudb, VF and VFL are mixed together and it's not possible to label them seprately.
-            if info.rhythms[-1].is_coarse:  # if this is coarse VF
-                label = 1  # definitely shockable
-            else:
-                label = 2  # intermediate (shock might not help fine VF)
-        elif last_rhythm.name == "(VFL":  # We define VFL as rapid VT here.
-            # VT at 240-300 beats/min is often termed ventricular flutter.
-            # http://emedicine.medscape.com/article/159075-overview
-            label = 1  # rapid VT is shockable
-        elif last_rhythm.name == "(VT":
-            # FIXME: definition of "rapid" VT?
-            # currently we use 100 BPM as the threshold
-            if last_rhythm.heart_rate > 100:
-                label = 1  # rapid VT is shockable
-            else:
-                label = 2  # slow VT might not be always shockable => intermediate
-        else:  # others
-            label = 0  # not shockable at all
-
     # multi-class: VF, VFL/VT, others
-    if label_method == 7:
+    if label_method == 6:
         last_rhythm = info.get_last_rhythm_name()
         if last_rhythm == "(VF":  # distinguish coarse VF from fine VF
             label = 1
@@ -106,6 +79,7 @@ def main():
     parser.add_argument("-f", "--features", type=int, nargs="+")  # feature selection
     parser.add_argument("-l", "--label-method", type=int, default=0, help=label_methods_desc)
     parser.add_argument("-x", "--exclude-noise", action="store_true", default=False)
+    parser.add_argument("-a", "--aha-test", action="store_true", default=False, help="AHA test for AED (-d, -l, and -x are ignored)")
     all_db_names = ("mitdb", "vfdb", "cudb", "edb")
     parser.add_argument("-d", "--db-names", type=str, nargs="+", choices=all_db_names, default=None)
     args = parser.parse_args()
@@ -114,6 +88,12 @@ def main():
     n_jobs = args.jobs
     if n_jobs == -1 or n_jobs > mp.cpu_count():
         n_jobs = (mp.cpu_count() - 1) if mp.cpu_count() > 1 else 1
+
+    # if we want to perform test based on AHA guideline for AED
+    if args.aha_test:
+        args.exclude_noise = True  # force artifact-free samples
+        args.label_method = None  # ignore --label-method
+        args.db_names = all_db_names  # ignore --db-names
 
     print(args)
     n_test_iters = args.iter
@@ -136,29 +116,30 @@ def main():
         # cv_scorer = metrics.make_scorer(metrics.fbeta_score, beta=10.0)
 
     # load features
-    x_data, x_info = load_features(args.input)
+    x_data, x_data_info = load_features(args.input)
 
     # exclude segments with noises if needed
     if args.exclude_noise:
-        no_artifact_idx = np.array([i for i, info in enumerate(x_info) if not info.has_artifact])
+        no_artifact_idx = np.array([i for i, info in enumerate(x_data_info) if not info.has_artifact])
         x_data = x_data[no_artifact_idx, :]
-        x_info = x_info[no_artifact_idx]
+        x_data_info = x_data_info[no_artifact_idx]
 
     # if we only want data from some specified databases
     if args.db_names:
-        include_idx = [i for i, info in enumerate(x_info) if info.record.split("/")[0] in args.db_names]
+        include_idx = [i for i, info in enumerate(x_data_info) if info.record.split("/")[0] in args.db_names]
         x_data = x_data[include_idx, :]
-        x_info = x_info[include_idx]
-
-    # label the data
-    y_data = np.array([make_label(info, args.label_method) for info in x_info])
-    print("Summary:\n", "# of segments:", len(x_data), "# of VT/Vf:", np.sum(y_data), len(x_info))
+        x_data_info = x_data_info[include_idx]
 
     # only select the specified feature
     if selected_features:
         x_data = x_data[:, selected_features]
 
-    x_indicies = list(range(len(x_data)))
+    if args.aha_test:  # prepare the data for AHA test procedure for AED
+        aha_test = AHATest(x_data, x_data_info)
+    else:  # label the data for ordinary test cases
+        y_data = np.array([make_label(info, args.label_method) for info in x_data_info])
+        print("Summary:\n", "# of segments:", len(x_data), "# of VT/Vf:", np.sum(y_data), len(x_data_info))
+        x_indicies = list(range(len(x_data)))
 
     # build estimators to test
     estimator_name = args.model
@@ -235,13 +216,16 @@ def main():
             print(estimator_name, it)
             row = {}
             # Here we split the indicies of the rows rather than the data array itself.
-            x_train_idx, x_test_idx, y_train, y_test = cross_validation.train_test_split(x_indicies,
-                                                                                         y_data,
-                                                                                         test_size=test_size,
-                                                                                         stratify=y_data)
+            if args.aha_test:
+                x_train_idx, x_test_idx, y_train, y_test = aha_test.train_test_split(test_size=test_size)
+            else:
+                x_train_idx, x_test_idx, y_train, y_test = cross_validation.train_test_split(x_indicies,
+                                                                                             y_data,
+                                                                                             test_size=test_size,
+                                                                                             stratify=y_data)
             x_train = x_data[x_train_idx]
             x_test = x_data[x_test_idx]
-            x_test_info = x_info[x_test_idx]
+            x_test_info = x_data_info[x_test_idx]
 
             # scale the features (NOTE: training and testing sets should be scaled separately.)
             preprocessing.scale(x_train, copy=False)
@@ -249,7 +233,7 @@ def main():
 
             fit_params = None
             # try to balance class weighting
-            if args.balanced_weight and not support_class_weight:
+            if args.balanced_weight and not support_class_weight and not (args.aha_test or args.label_method >= 6):
                 # perform sample weighting instead if the estimator does not support class weighting
                 n_vf = np.sum(y_data)
                 sample_ratio = (len(y_data) - n_vf) / n_vf  # non-vf/vf ratio
@@ -272,7 +256,7 @@ def main():
             if estimator_name.startswith("mlp"):  # sknn has different format of output and it needs to be flatten into a 1d array.
                 y_predict = y_predict.flatten()
 
-            if args.label_method >= 6:  # multi-class
+            if args.aha_test or args.label_method >= 6:  # multi-class
                 print(metrics.classification_report(y_true=y_test, y_pred=y_predict, target_names=["non-shockable", "shockable", "intermediate"]))
                 continue  # saving to csv report is not yet supported for multi-class problems
 

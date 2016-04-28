@@ -59,7 +59,7 @@ class SegmentInfo:
         return self.rhythms[-1].name if self.rhythms else ""
 
     def get_last_rhythm(self):
-        return self.rhythms[-1].name if self.rhythms else None
+        return self.rhythms[-1] if self.rhythms else None
 
 
 class Segment:
