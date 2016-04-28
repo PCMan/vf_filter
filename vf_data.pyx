@@ -84,10 +84,19 @@ class Segment:
                 end_beat = next_rhythm.begin_beat if next_rhythm else info.n_beats
                 rhythm.n_beats = end_beat - rhythm.begin_beat
 
-            if rhythm.name == "(VF":  # try to identify coarse VF
+            if rhythm.name == "(VF":  # try to distinguish coarse VF from fine VF
+                # References for the definition of "coarse":
+                # 1. Foundations of Respiratory Care. by Kenneth A. Wyka，Paul J. Mathews，John Rutkowski
+                #    Chapter 19. p.537
+                #    Quote: "Coarse VF exists when wave amplitude is more than 3 mm."
+                # 2. ECGs Made Easy by Barbara J Aehlert
+                #    p.203
+                #    Quote: "Coarse VF is 3 mm or more in amplitude. Fine VF is less than 3 mm in amplitude."
                 # print(rhythm.name, rhythm.begin_time, end_time)
                 rhythm_signals = signals[rhythm.begin_time:end_time]
                 amplitude = (np.max(rhythm_signals) - np.min(rhythm_signals)) / gain
+
+                # in normal ECG settings, amplitude of 1 mm means 0.1 mV
                 rhythm.is_coarse = True if amplitude > 0.3 else False
                 # if not rhythm.is_coarse:
                 #     print("Fine VF")
