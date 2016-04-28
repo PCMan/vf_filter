@@ -38,7 +38,7 @@ def load_all_segments(db_names, segment_duration):
 
 def main():
     # parse command line arguments
-    all_db_names = ("mitdb", "vfdb", "cudb")
+    all_db_names = ("mitdb", "vfdb", "cudb", "edb")
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--db-names", type=str, nargs="+", choices=all_db_names, default=all_db_names)
     parser.add_argument("-o", "--output", type=str, required=True)
