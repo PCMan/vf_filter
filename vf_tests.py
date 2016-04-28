@@ -57,17 +57,22 @@ def make_label(info, label_method):
         if last_rhythm.name == "(VF":  # distinguish coarse VF from fine VF
             # warning: in cudb, VF and VFL are mixed together and it's not possible to label them seprately.
             if info.rhythms[-1].is_coarse:  # if this is coarse VF
-                label = 1  # shockable
+                label = 1  # definitely shockable
             else:
-                label = 1  # intermediate
+                label = 2  # intermediate (shock might not help fine VF)
         elif last_rhythm.name == "(VFL":  # We define VFL as rapid VT here.
             # VT at 240-300 beats/min is often termed ventricular flutter.
             # http://emedicine.medscape.com/article/159075-overview
-            label = 2
+            label = 1  # rapid VT is shockable
         elif last_rhythm.name == "(VT":
-            label = 2
+            # FIXME: definition of "rapid" VT?
+            # currently we use 100 BPM as the threshold
+            if last_rhythm.heart_rate > 100:
+                label = 1  # rapid VT is shockable
+            else:
+                label = 2  # slow VT might not be always shockable => intermediate
         else:  # others
-            label = 0
+            label = 0  # not shockable at all
 
     # multi-class: VF, VFL/VT, others
     if label_method == 7:

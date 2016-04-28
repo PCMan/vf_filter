@@ -92,12 +92,15 @@ class Segment:
                 # 2. ECGs Made Easy by Barbara J Aehlert
                 #    p.203
                 #    Quote: "Coarse VF is 3 mm or more in amplitude. Fine VF is less than 3 mm in amplitude."
+                # 3. In AHA recommendations for AED, a peak-to-peak amplitude of 0.2 mV is suggested.
                 # print(rhythm.name, rhythm.begin_time, end_time)
                 rhythm_signals = signals[rhythm.begin_time:end_time]
+                # FIXME: max - min only gives a rough estimate of peak-to-peak amplitude here :-(
                 amplitude = (np.max(rhythm_signals) - np.min(rhythm_signals)) / gain
 
                 # in normal ECG settings, amplitude of 1 mm means 0.1 mV
-                rhythm.is_coarse = True if amplitude > 0.3 else False
+                # Here we use the threshold 0.2 mV suggested by AHA despite that some other books use 0.3 mV instead.
+                rhythm.is_coarse = True if amplitude > 0.2 else False
                 # if not rhythm.is_coarse:
                 #     print("Fine VF")
 
