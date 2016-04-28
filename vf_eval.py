@@ -42,18 +42,19 @@ EXCLUDED = 3
 
 RAPID_VT_RATE = 100
 
+
 # Test the classifiers with the settings suggested by AHA for AEDs
 class AHATest:
 
     def __init__(self, x_data, x_data_info):
         # prepare the data for AHA test procedure for AED
-        self.coarse_vf_idx = array('i')
-        self.fine_vf_idx = array('i')
-        self.rapid_vt_idx = array('i')
-        self.slow_vt_idx = array('i')
-        self.nsr_idx = array('i')
-        self.asystole_idx = array('i')
-        self.others_idx = array('i')
+        coarse_vf_idx = array('i')
+        fine_vf_idx = array('i')
+        rapid_vt_idx = array('i')
+        slow_vt_idx = array('i')
+        nsr_idx = array('i')
+        asystole_idx = array('i')
+        others_idx = array('i')
         y_data = np.zeros(len(x_data))
 
         for i, info in enumerate(x_data_info):  # examine the info of each ECG segment
@@ -62,24 +63,24 @@ class AHATest:
                 name = last_rhythm.name
                 if name == "(VF":
                     if last_rhythm.is_coarse:
-                        self.coarse_vf_idx.append(i)
+                        coarse_vf_idx.append(i)
                         y_data[i] = SHOCKABLE
                     else:
-                        self.fine_vf_idx.append(i)
+                        fine_vf_idx.append(i)
                         y_data[i] = INTERMEDIATE
                 elif name == "(VT":
                     hr = last_rhythm.get_heart_rate()
                     if hr > RAPID_VT_RATE:
-                        self.rapid_vt_idx.append(i)
+                        rapid_vt_idx.append(i)
                         y_data[i] = SHOCKABLE
                     elif hr > 0:
-                        self.slow_vt_idx.append(i)
+                        slow_vt_idx.append(i)
                         y_data[i] = INTERMEDIATE
                     else:
                         y_data[i] = EXCLUDED
                     # rhythms with HR = 0 BPM are those for which HR is unknwon.
                 elif name == "(VFL":
-                    self.rapid_vt_idx.append(i)
+                    rapid_vt_idx.append(i)
                     y_data[i] = SHOCKABLE
                 elif name == "(N":
                     # nearly all rythms other than VF are annotated as NSR in cudb
@@ -87,14 +88,23 @@ class AHATest:
                     if info.record.startswith("cudb/"):
                         y_data[i] = EXCLUDED
                     else:
-                        self.nsr_idx.append(i)
+                        nsr_idx.append(i)
                         y_data[i] = NON_SHOCKABLE
                 elif name == "(ASYS":
-                    self.asystole_idx.append(i)
+                    asystole_idx.append(i)
                     y_data[i] = NON_SHOCKABLE
                 else:
-                    self.others_idx.append(i)
+                    others_idx.append(i)
                     y_data[i] = NON_SHOCKABLE
+
+        self.coarse_vf_idx = np.array(coarse_vf_idx)
+        self.fine_vf_idx = np.array(fine_vf_idx)
+        self.rapid_vt_idx = np.array(rapid_vt_idx)
+        self.slow_vt_idx = np.array(slow_vt_idx)
+        self.nsr_idx = np.array(nsr_idx)
+        self.asystole_idx = np.array(asystole_idx)
+        self.others_idx = np.array(others_idx)
+
         self.y_data = y_data
 
     # randomly generate train and test set based on AHA guideline for AED
