@@ -209,7 +209,7 @@ def main():
 
     # Run the selected test
     if args.aha_test:
-        _csv_fields = ["se", "sp", "ppv", "acc", "tp", "tn", "fp", "fn"]
+        _csv_fields = ["tpr", "tnr", "ppv", "acc", "tp", "tn", "fp", "fn"]
         csv_fields = []
         for class_id in aha_test.get_classes():
             csv_fields.extend(["{0}[{1}]".format(field, class_id) for field in _csv_fields])
@@ -266,8 +266,8 @@ def main():
 
             if args.aha_test or args.label_method >= 6:  # multi-class for AHA clasification scheme
                 for class_id, result in aha_test.classification_report(y_test, y_predict).items():
-                    row["se[{0}]".format(class_id)] = result.sensitivity
-                    row["sp[{0}]".format(class_id)] = result.specificity
+                    row["tpr[{0}]".format(class_id)] = result.sensitivity
+                    row["tnr[{0}]".format(class_id)] = result.specificity
                     row["ppv[{0}]".format(class_id)] = result.precision
                     row["acc[{0}]".format(class_id)] = result.accuracy
                     row["tp[{0}]".format(class_id)] = result.tp

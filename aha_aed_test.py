@@ -83,12 +83,13 @@ class AHATest:
         self.y_data = y_data
 
     def summary(self):
-        n_total = np.sum(self.y_data != EXCLUDED)
         n_shock = (len(self.coarse_vf_idx) + len(self.rapid_vt_idx))
         n_intermediate = (len(self.fine_vf_idx) + len(self.slow_vt_idx))
         n_nonshock = (len(self.asystole_idx) + len(self.nsr_idx) + len(self.others_idx))
+        n_total_included = n_shock + n_nonshock + n_intermediate
         summary_text = """
-total: {total}
+total (the whole dataset): {total}
+total included: {total_included}
 shockable: {shock} ({shock_p} %)
     coarse VF: {cvf}
     rapid VT: {rvt}
@@ -100,17 +101,18 @@ non-shockable: {nonshock} ({nonshock_p} %)
     nsr: {nsr}
     others: {others}
         """.format(
-            total=n_total,
+            total=len(self.y_data),
+            total_included=n_total_included,
             shock=n_shock,
-            shock_p=(n_shock * 100 / n_total),
+            shock_p=(n_shock * 100 / n_total_included),
             cvf=len(self.coarse_vf_idx),
             rvt=len(self.rapid_vt_idx),
             inter=n_intermediate,
-            inter_p=(n_intermediate * 100 / n_total),
+            inter_p=(n_intermediate * 100 / n_total_included),
             fvf=len(self.fine_vf_idx),
             svt=len(self.slow_vt_idx),
             nonshock=n_nonshock,
-            nonshock_p=(n_nonshock * 100 / n_total),
+            nonshock_p=(n_nonshock * 100 / n_total_included),
             asys=len(self.asystole_idx),
             nsr=len(self.nsr_idx),
             others=len(self.others_idx)
@@ -173,7 +175,8 @@ non-shockable: {nonshock} ({nonshock_p} %)
             y_test.append(sub_y_test)
         return np.concatenate(x_train_idx), np.concatenate(x_test_idx), np.concatenate(y_train), np.concatenate(y_test)
 
-    def classification_report(self, y_true, y_predict):
+    @staticmethod
+    def classification_report(y_true, y_predict):
         result = {}
         # convert multi-class result to several binary tests
         classes = [NON_SHOCKABLE, SHOCKABLE, INTERMEDIATE]
@@ -184,5 +187,6 @@ non-shockable: {nonshock} ({nonshock_p} %)
             result[i] = bin_result
         return result
 
-    def get_classes(self):
+    @staticmethod
+    def get_classes():
         return [NON_SHOCKABLE, SHOCKABLE, INTERMEDIATE]
