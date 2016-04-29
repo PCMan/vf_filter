@@ -4,6 +4,7 @@
 import numpy as np
 from array import array
 from sklearn import cross_validation
+from sklearn.preprocessing import label_binarize
 from vf_eval import *
 
 __all__ = ["AHATest"]
@@ -114,7 +115,7 @@ non-shockable: {nonshock} ({nonshock_p} %)
             nsr=len(self.nsr_idx),
             others=len(self.others_idx)
         )
-        print(summary_text)
+        return summary_text
 
     # randomly generate train and test set based on AHA guideline for AED
     def train_test_split(self, test_size=0.3):
@@ -171,3 +172,17 @@ non-shockable: {nonshock} ({nonshock_p} %)
             y_train.append(sub_y_train)
             y_test.append(sub_y_test)
         return np.concatenate(x_train_idx), np.concatenate(x_test_idx), np.concatenate(y_train), np.concatenate(y_test)
+
+    def classification_report(self, y_true, y_predict):
+        result = {}
+        # convert multi-class result to several binary tests
+        classes = [NON_SHOCKABLE, SHOCKABLE, INTERMEDIATE]
+        bin_true = label_binarize(y_true, classes=classes)
+        bin_predict = label_binarize(y_predict, classes=classes)
+        for i in range(len(classes)):
+            bin_result = BinaryClassificationResult(bin_true[:, i], bin_predict[:, i])
+            result[i] = bin_result
+        return result
+
+    def get_classes(self):
+        return [NON_SHOCKABLE, SHOCKABLE, INTERMEDIATE]

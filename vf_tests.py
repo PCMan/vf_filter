@@ -137,7 +137,7 @@ def main():
 
     if args.aha_test:  # prepare the data for AHA test procedure for AED
         aha_test = AHATest(x_data, x_data_info)
-        aha_test.summary()
+        print(aha_test.summary())
     else:  # label the data for ordinary test cases
         y_data = np.array([make_label(info, args.label_method) for info in x_data_info])
         print("Summary:\n", "# of segments:", len(x_data), "# of VT/Vf:", np.sum(y_data), len(x_data_info))
@@ -208,7 +208,13 @@ def main():
         estimator = mlp.Classifier(layers=layers, batch_size=150)
 
     # Run the selected test
-    csv_fields = ["se", "sp", "ppv", "acc", "se(sp95)", "se(sp97)", "se(sp99)", "tp", "tn", "fp", "fn"]
+    if args.aha_test:
+        _csv_fields = ["se", "sp", "ppv", "acc", "tp", "tn", "fp", "fn"]
+        csv_fields = []
+        for class_id in aha_test.get_classes():
+            csv_fields.extend(["{0}[{1}]".format(field, class_id) for field in _csv_fields])
+    else:
+        csv_fields = ["se", "sp", "ppv", "acc", "se(sp95)", "se(sp97)", "se(sp99)", "tp", "tn", "fp", "fn"]
     csv_fields.extend(sorted(param_grid.keys()))
     with open(args.output, "w", newline="", buffering=1) as f:  # buffering=1 means line buffering
         writer = csv.DictWriter(f, fieldnames=csv_fields)
@@ -258,33 +264,40 @@ def main():
             if estimator_name.startswith("mlp"):  # sknn has different format of output and it needs to be flatten into a 1d array.
                 y_predict = y_predict.flatten()
 
-            if args.aha_test or args.label_method >= 6:  # multi-class
-                print(metrics.classification_report(y_true=y_test, y_pred=y_predict, target_names=["non-shockable", "shockable", "intermediate"]))
-                continue  # saving to csv report is not yet supported for multi-class problems
+            if args.aha_test or args.label_method >= 6:  # multi-class for AHA clasification scheme
+                for class_id, result in aha_test.classification_report(y_test, y_predict).items():
+                    row["se[{0}]".format(class_id)] = result.sensitivity
+                    row["sp[{0}]".format(class_id)] = result.specificity
+                    row["ppv[{0}]".format(class_id)] = result.precision
+                    row["acc[{0}]".format(class_id)] = result.accuracy
+                    row["tp[{0}]".format(class_id)] = result.tp
+                    row["tn[{0}]".format(class_id)] = result.tn
+                    row["fp[{0}]".format(class_id)] = result.fp
+                    row["fn[{0}]".format(class_id)] = result.fn
+            else:  # simple binary classification
+                result = BinaryClassificationResult(y_test, y_predict)
+                row["se"] = result.sensitivity
+                row["sp"] = result.specificity
+                row["ppv"] = result.precision
+                row["acc"] = result.accuracy
+                row["tp"] = result.tp
+                row["tn"] = result.tn
+                row["fp"] = result.fp
+                row["fn"] = result.fn
 
-            result = ClassificationResult(y_test, y_predict)
-            row["se"] = result.sensitivity
-            row["sp"] = result.specificity
-            row["ppv"] = result.precision
-            row["acc"] = result.accuracy
-            row["tp"] = result.tp
-            row["tn"] = result.tn
-            row["fp"] = result.fp
-            row["fn"] = result.fn
+                # prediction with probabilities
+                if hasattr(estimator, "predict_proba"):
+                    y_predict_scores = grid.predict_proba(x_test)[:, 1]
+                    false_pos_rate, true_pos_rate, thresholds = metrics.roc_curve(y_test, y_predict_scores, pos_label=1)
+                    # find sensitivity at 95% specificity
+                    x = np.searchsorted(false_pos_rate, 0.05)
+                    row["se(sp95)"] = true_pos_rate[x]
 
-            # prediction with probabilities
-            if hasattr(estimator, "predict_proba"):
-                y_predict_scores = grid.predict_proba(x_test)[:, 1]
-                false_pos_rate, true_pos_rate, thresholds = metrics.roc_curve(y_test, y_predict_scores, pos_label=1)
-                # find sensitivity at 95% specificity
-                x = np.searchsorted(false_pos_rate, 0.05)
-                row["se(sp95)"] = true_pos_rate[x]
+                    x = np.searchsorted(false_pos_rate, 0.03)
+                    row["se(sp97)"] = true_pos_rate[x]
 
-                x = np.searchsorted(false_pos_rate, 0.03)
-                row["se(sp97)"] = true_pos_rate[x]
-
-                x = np.searchsorted(false_pos_rate, 0.01)
-                row["se(sp99)"] = true_pos_rate[x]
+                    x = np.searchsorted(false_pos_rate, 0.01)
+                    row["se(sp99)"] = true_pos_rate[x]
 
             # best parameters of grid search
             row.update(grid.best_params_)

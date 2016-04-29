@@ -14,8 +14,8 @@ def balanced_error_rate(y_true, y_predict):
     return 0.5 * (fn / n_positive + fp / n_negative)
 
 
-class ClassificationResult:
-    def __init__(self, y_true, y_predict, pos_label=1):
+class BinaryClassificationResult:
+    def __init__(self, y_true, y_predict):
         correct = (y_true == y_predict)
         incorrect = np.logical_not(correct)
         pred_negative = np.logical_not(y_predict)
