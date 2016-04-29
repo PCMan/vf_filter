@@ -14,7 +14,9 @@ SHOCKABLE = 1
 INTERMEDIATE = 2
 EXCLUDED = 3
 
-RAPID_VT_RATE = 100
+# Use threshold value: 180 BPM to define rapid VT
+# Reference: Nishiyama et al. 2015. Diagnosis of Automated External Defibrillators (JAHA)
+RAPID_VT_RATE = 180
 
 
 # Test the classifiers with the settings suggested by AHA for AEDs
@@ -44,7 +46,7 @@ class AHATest:
                         y_data[i] = INTERMEDIATE
                 elif name == "(VT":
                     hr = last_rhythm.get_heart_rate()
-                    if hr > RAPID_VT_RATE:
+                    if hr >= RAPID_VT_RATE:
                         rapid_vt_idx.append(i)
                         y_data[i] = SHOCKABLE
                     elif hr > 0:
