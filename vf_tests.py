@@ -136,6 +136,7 @@ def main():
 
     if args.aha_test:  # prepare the data for AHA test procedure for AED
         aha_test = AHATest(x_data, x_data_info)
+        aha_test.summary()
     else:  # label the data for ordinary test cases
         y_data = np.array([make_label(info, args.label_method) for info in x_data_info])
         print("Summary:\n", "# of segments:", len(x_data), "# of VT/Vf:", np.sum(y_data), len(x_data_info))

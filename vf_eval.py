@@ -83,9 +83,10 @@ class AHATest:
                     rapid_vt_idx.append(i)
                     y_data[i] = SHOCKABLE
                 elif name == "(N":
-                    # nearly all rythms other than VF are annotated as NSR in cudb
+                    # nearly all rhythms other than VF are annotated as NSR in cudb
                     # so it's unreliable. Drop NSR beats from cudb.
-                    if info.record.startswith("cudb/"):
+                    # edb is good, but it contains too many NSR samples, slowing down training. So drop it.
+                    if info.record.startswith("cudb/") or info.record.startswith("edb/"):
                         y_data[i] = EXCLUDED
                     else:
                         nsr_idx.append(i)
@@ -106,6 +107,41 @@ class AHATest:
         self.others_idx = np.array(others_idx)
 
         self.y_data = y_data
+
+    def summary(self):
+        n_total = np.sum(self.y_data != EXCLUDED)
+        n_shock = (len(self.coarse_vf_idx) + len(self.rapid_vt_idx))
+        n_intermediate = (len(self.fine_vf_idx) + len(self.slow_vt_idx))
+        n_nonshock = (len(self.asystole_idx) + len(self.nsr_idx) + len(self.others_idx))
+        summary_text = """
+total: {total}
+shockable: {shock} ({shock_p} %)
+    coarse VF: {cvf}
+    rapid VT: {rvt}
+intermediate: {inter} ({inter_p} %)
+    fine VF: {fvf}
+    slow VT: {svt}
+non-shockable: {nonshock} ({nonshock_p} %)
+    asystole: {asys}
+    nsr: {nsr}
+    others: {others}
+        """.format(
+            total=n_total,
+            shock=n_shock,
+            shock_p=(n_shock * 100 / n_total),
+            cvf=len(self.coarse_vf_idx),
+            rvt=len(self.rapid_vt_idx),
+            inter=n_intermediate,
+            inter_p=(n_intermediate * 100 / n_total),
+            fvf=len(self.fine_vf_idx),
+            svt=len(self.slow_vt_idx),
+            nonshock=n_nonshock,
+            nonshock_p=(n_nonshock * 100 / n_total),
+            asys=len(self.asystole_idx),
+            nsr=len(self.nsr_idx),
+            others=len(self.others_idx)
+        )
+        print(summary_text)
 
     # randomly generate train and test set based on AHA guideline for AED
     def train_test_split(self, test_size=0.3):
@@ -139,6 +175,7 @@ class AHATest:
         scale = n_avail / n_desired
         n_actual = (n_desired * np.min(scale[scale > 1.0])).astype("int")
 
+        # stratified random sampling for each subtype of arrhtyhmia
         x_train_idx = []
         x_test_idx = []
         y_train = []
