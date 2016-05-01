@@ -12,7 +12,7 @@ cdef extern from "<wfdb/wfdb.h>":
     ctypedef WFDB_Frequency FFREQUENCY
     ctypedef int FINT
     ctypedef unsigned int WFDB_Annotator
-    ctypedef double	WFDB_Gain;
+    ctypedef double	WFDB_Gain
     ctypedef unsigned int WFDB_Group
 
     ctypedef struct WFDB_Anninfo:
@@ -47,7 +47,7 @@ cdef extern from "<wfdb/wfdb.h>":
     FINT isigopen(char *record, WFDB_Siginfo *siarray, int nsig)
     FFREQUENCY sampfreq(char *record)
     FINT getvec(WFDB_Sample *vector)
-    FINT getann(WFDB_Annotator a, WFDB_Annotation *annot);
+    FINT getann(WFDB_Annotator a, WFDB_Annotation *annot)
     FSTRING annstr(int annotation_code)
     void wfdbquit()
 
