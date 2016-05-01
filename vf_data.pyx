@@ -2,9 +2,8 @@
 import pyximport; pyximport.install()
 import numpy as np
 import os
-import pickle
 from array import array
-
+import wfdb_read
 
 # dataset_dir = os.path.join(os.path.dirname(__file__), "datasets")
 dataset_dir = "datasets"
@@ -94,13 +93,16 @@ class Segment:
                 #    Quote: "Coarse VF is 3 mm or more in amplitude. Fine VF is less than 3 mm in amplitude."
                 # 3. In AHA recommendations for AED, a peak-to-peak amplitude of 0.2 mV is suggested.
                 # print(rhythm.name, rhythm.begin_time, end_time)
-                rhythm_signals = signals[rhythm.begin_time:end_time]
-                # FIXME: max - min only gives a rough estimate of peak-to-peak amplitude here :-(
-                amplitude = (np.max(rhythm_signals) - np.min(rhythm_signals)) / gain
+                if end_time > rhythm.begin_time:
+                    rhythm_signals = signals[rhythm.begin_time:end_time]
+                    # FIXME: max - min only gives a rough estimate of peak-to-peak amplitude here :-(
+                    amplitude = (np.max(rhythm_signals) - np.min(rhythm_signals)) / gain
 
-                # in normal ECG settings, amplitude of 1 mm means 0.1 mV
-                # Here we use the threshold 0.2 mV suggested by AHA despite that some other books use 0.3 mV instead.
-                rhythm.is_coarse = True if amplitude > 0.2 else False
+                    # in normal ECG settings, amplitude of 1 mm means 0.1 mV
+                    # Here we use the threshold 0.2 mV suggested by AHA despite that some other books use 0.3 mV instead.
+                    rhythm.is_coarse = True if amplitude > 0.2 else False
+                else:
+                    rhythm.is_coarse = False
                 # if not rhythm.is_coarse:
                 #     print("Fine VF")
 
@@ -166,19 +168,16 @@ class Record:
         record_name = "{0}/{1}".format(db_name, record)
         self.name = record_name
 
-        record_filename = os.path.join(dataset_dir, db_name, record)
         cdef list annotations
-        with open(record_filename, "rb") as f:
-            (self.sampling_rate, self.gain) = pickle.load(f)
-            self.signals = pickle.load(f)
-            # print(record_filename)
+        (n_channels, self.sampling_rate, self.gain, self.signals) = wfdb_read.read_signals(record_name)
+        # print(record_name)
 
-            # read annotations
-            annotations = []
-            for ann in pickle.load(f):
-                annotation = Annotation(*ann)
-                annotations.append(annotation)
-            self.annotations = annotations
+        # read annotations
+        annotations = []
+        for ann in wfdb_read.read_annotations(record_name):
+            annotation = Annotation(*ann)
+            annotations.append(annotation)
+        self.annotations = annotations
 
     def get_total_time(self):
         return len(self.signals) / self.sampling_rate
