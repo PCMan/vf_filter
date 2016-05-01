@@ -6,15 +6,16 @@ from array import array
 import wfdb_read
 
 # dataset_dir = os.path.join(os.path.dirname(__file__), "datasets")
-dataset_dir = "datasets"
+filelist_dir = "file_lists"
 
 
 # get name of records from a database
-def get_records(db_name):
+def get_records(str db_name):
     records = []
-    dirname = os.path.join(dataset_dir, db_name)
-    for name in os.listdir(dirname):
-        records.append(name)
+    with open(os.path.join(filelist_dir, "{0}.txt".format(db_name)), "r") as f:
+        for line in f:
+            name = line.strip()
+            records.append(name)
     records.sort()
     return records
 

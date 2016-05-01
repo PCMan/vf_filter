@@ -226,6 +226,7 @@ def main():
             # Here we split the indicies of the rows rather than the data array itself.
             if args.aha_test:
                 x_train_idx, x_test_idx, y_train, y_test = aha_test.train_test_split(test_size=test_size)
+                print(len(y_train), len(y_test))
             else:
                 x_train_idx, x_test_idx, y_train, y_test = cross_validation.train_test_split(x_indicies,
                                                                                              y_data,
