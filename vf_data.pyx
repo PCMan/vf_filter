@@ -3,7 +3,7 @@ import pyximport; pyximport.install()
 import numpy as np
 import os
 from array import array
-import wfdb_read
+import wfdb_reader
 
 # dataset_dir = os.path.join(os.path.dirname(__file__), "datasets")
 filelist_dir = "file_lists"
@@ -170,12 +170,12 @@ class Record:
         self.name = record_name
 
         cdef list annotations
-        (n_channels, self.sampling_rate, self.gain, self.signals) = wfdb_read.read_signals(record_name)
+        (n_channels, self.sampling_rate, self.gain, self.signals) = wfdb_reader.read_signals(record_name)
         # print(record_name)
 
         # read annotations
         annotations = []
-        for ann in wfdb_read.read_annotations(record_name):
+        for ann in wfdb_reader.read_annotations(record_name):
             annotation = Annotation(*ann)
             annotations.append(annotation)
         self.annotations = annotations
