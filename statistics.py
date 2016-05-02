@@ -67,7 +67,7 @@ def main():
         print(db_name)
         rhythm_statistics = {}
         for record_name in vf_data.get_records(db_name):
-            # load the record from the ECG database
+            # load the record_name from the ECG database
             record = vf_data.Record()
             record.load(db_name, record_name)
             rhythms_of_the_record = set()
@@ -76,7 +76,7 @@ def main():
                 if args.exclude_noise and info.has_artifact:
                     continue
 
-                # print(info.record, info.begin_time, info.rhythm_types)
+                # print(info.record_name, info.begin_time, info.rhythm_types)
                 for rhythm in info.rhythms:
                     # distinguish subtypes of VT and VF
                     if rhythm.name == "(VF":
@@ -88,7 +88,7 @@ def main():
                         hr = rhythm.get_heart_rate()
                         if hr == 0:
                             rhythm.name = "(VT.o"
-                        elif hr > 100:
+                        elif hr > 180:
                             rhythm.name = "(VT.r"
                         else:
                             rhythm.name = "(VT.s"

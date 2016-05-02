@@ -28,7 +28,7 @@ def load_all_segments(db_names, segment_duration):
     idx = 0
     for db_name in db_names:
         for record_name in vf_data.get_records(db_name):
-            # load the record from the ECG database
+            # load the record_name from the ECG database
             record = vf_data.Record()
             record.load(db_name, record_name)
             for segment in record.get_segments(segment_duration):

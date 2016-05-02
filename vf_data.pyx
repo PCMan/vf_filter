@@ -28,7 +28,6 @@ class Rhythm:
         self.begin_beat = begin_beat  # valid when beat annotations are available
         self.end_time = 0
         self.end_beat = 0  # valid when beat annotations are available
-        self.n_beats = 0  # valid when beat annotations are available
 
     def set_end(self, int end_time, int end_beat = 0):
         self.end_time = end_time
@@ -40,13 +39,14 @@ class Rhythm:
     # valid only when beat annotations are available
     def get_heart_rate(self):
         cdef double duration = self.get_duration()
-        cdef double heart_rate = (self.n_beats / duration) * 60 if duration else 0.0  # heart rate (beats per minute)
+        cdef double n_beats = self.end_beat - self.begin_beat
+        cdef double heart_rate = (n_beats / duration) * 60 if duration else 0.0  # heart rate (beats per minute)
         return heart_rate
 
 
 class SegmentInfo:
-    def __init__(self, str record, int sampling_rate, int begin_time) -> object:
-        self.record = record
+    def __init__(self, str record_name, int sampling_rate, int begin_time) -> object:
+        self.record_name = record_name
         self.sampling_rate = sampling_rate
         self.begin_time = begin_time  # in terms of sample number (reletive to the head of the segment)
         self.has_artifact = False
@@ -195,7 +195,7 @@ class Record:
     def get_total_time(self):
         return len(self.signals) / self.sampling_rate
 
-    # parse the annotations of the record to get all of the rhythms with artifacts excluded
+    # parse the annotations of the record_name to get all of the rhythms with artifacts excluded
     def get_artifact_free_rhythms(self):
         rhythms = []
         cdef list annotations = self.annotations
@@ -210,15 +210,15 @@ class Record:
                 if ann.is_beat_annotation():  # if this is a beat annotation
                     n_beats += 1
                 else:  # non-beat annotations (rhythm, quality, ...etc.)
-                    pass
-                rhythm_type = ann.get_rhythm_type()
-                if rhythm_type:
-                    if current_rhythm:  # end of current rhythm
-                        current_rhythm.set_end(end_time=ann.time, end_beat=n_beats)
-                        current_rhythm = None
-                    # FIXME: how to handle artifacts?
-                    current_rhythm = Rhythm(rhythm_type, self.sampling_rate, begin_time=ann.time, begin_beat=n_beats)
-                    rhythms.append(current_rhythm)
+                    if ann.code == '"':  # comment annotation (used for rhythm change)
+                        rhythm_type = ann.get_rhythm_type()
+                        if rhythm_type:
+                            if current_rhythm:  # end of current rhythm
+                                current_rhythm.set_end(end_time=ann.time, end_beat=n_beats)
+                                current_rhythm = None
+                            # FIXME: how to handle artifacts?
+                            current_rhythm = Rhythm(rhythm_type, self.sampling_rate, begin_time=ann.time, begin_beat=n_beats)
+                            rhythms.append(current_rhythm)
             else:  # mitdb like formats (mitdb, vfdb, cudb, edb...)
                 if ann.is_beat_annotation():  # if this is a beat annotation
                     n_beats += 1
@@ -262,6 +262,7 @@ class Record:
                             if rhythm_type:  # continue from last rhythm type
                                 current_rhythm = Rhythm(rhythm_type, self.sampling_rate, begin_time=ann.time, begin_beat=n_beats)
                                 rhythms.append(current_rhythm)
+        # FIXME: merge rhythm segments of the same type if their are no gaps among them.
         if current_rhythm:  # end the last rhythm
             current_rhythm.set_end(end_time=len(self.signals), end_beat=n_beats)
         return rhythms
@@ -280,7 +281,7 @@ class Record:
             # split the segment
             segment_end = segment_begin + segment_size
             segment_signals = self.signals[segment_begin:segment_end]
-            segment_info = SegmentInfo(record=self.name, sampling_rate=self.sampling_rate, begin_time=segment_begin)
+            segment_info = SegmentInfo(self.name, self.sampling_rate, segment_begin)
             segment_info.has_artifact = in_artifacts
 
             n_beats = 0  # beat number of current rhythm
