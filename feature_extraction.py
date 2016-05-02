@@ -19,28 +19,22 @@ def extract_features(idx, segment, sampling_rate):
         signals = signal.resample(signals, sampling_rate * segment_duration)
 
     features = vf_features.extract_features(signals, sampling_rate)
-    print(info.record, info.begin_time, features)
+    print("{0}: {1}/{2}".format(idx, info.record_name, info.begin_time), features)
     return idx, features, info
 
 
 # this is a generator function
-def load_all_segments(db_names, segment_duration):
+def load_all_segments(segment_duration):
     idx = 0
-    for db_name in db_names:
-        for record_name in vf_data.get_records(db_name):
-            # load the record_name from the ECG database
-            record = vf_data.Record()
-            record.load(db_name, record_name)
-            for segment in record.get_segments(segment_duration):
-                yield idx, segment
-                idx += 1
+    dataset = vf_data.DataSet()
+    for segment in dataset.get_samples(segment_duration):
+        yield idx, segment
+        idx += 1
 
 
 def main():
     # parse command line arguments
-    all_db_names = ("mitdb", "vfdb", "cudb", "edb")
     parser = argparse.ArgumentParser()
-    parser.add_argument("-d", "--db-names", type=str, nargs="+", choices=all_db_names, default=all_db_names)
     parser.add_argument("-o", "--output", type=str, required=True)
     parser.add_argument("-s", "--segment-duration", type=int, default=8)
     parser.add_argument("-r", "--sampling-rate", type=int, default=250)
@@ -51,7 +45,7 @@ def main():
     x_data = []
     # perform segmentation + feature extraction
     parellel = Parallel(n_jobs=args.jobs, verbose=0, backend="multiprocessing", max_nbytes=2048)
-    results = parellel(delayed(extract_features)(idx, segment, args.sampling_rate) for idx, segment in load_all_segments(args.db_names, args.segment_duration))
+    results = parellel(delayed(extract_features)(idx, segment, args.sampling_rate) for idx, segment in load_all_segments(args.segment_duration))
     # sort the results from multiple jobs according to the order they are emitted
     results.sort(key=lambda result: result[0])
     for idx, features, segment_info in results:

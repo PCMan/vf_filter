@@ -9,58 +9,86 @@ from sklearn import grid_search
 import vf_data
 from vf_features import load_features
 from vf_eval import *
-from aha_aed_test import *
 import multiprocessing as mp
 import csv
 import argparse
+from array import array
 
+
+NON_SHOCKABLE = 0
+SHOCKABLE = 1
+INTERMEDIATE = 2
+aha_classes = (NON_SHOCKABLE, SHOCKABLE, INTERMEDIATE)
+
+# Use threshold value: 180 BPM to define rapid VT
+# Reference: Nishiyama et al. 2015. Diagnosis of Automated External Defibrillators (JAHA)
+RAPID_VT_RATE = 180
+
+# 0.2 mV is suggested by AHA
+COARSE_VF_THRESHOLD = 0.2
 
 # label the segment according to different problem definition
 label_methods_desc = """
 label methods:
-0: binary => terminated with VF: 1, others: 0
-1: binary => terminated with VF or VFL: 1, others: 0
-2: binary => terminated with VF or VFL or VT: 1, others: 0
-------------------------------------------
-3: binary => has VF: 1, others: 0
-4: binary => has VF or VFL: 1, others: 0
-5: binary => has VF or VFL or VT: 1, others: 0
-------------------------------------------
-6: multi-class:
-  VF: 1
-  VFL/VT: 2
-  others: 0
+aha: multi-class based on AHA guideline for AED:
+    shockable (coarse VF + rapid VT): 1
+    intermediate (fine VF + slow VT) :2
+    non-shockable (others): 0
+0: binary => VF: 1, others: 0
+1: binary => VF or VFL: 1, others: 0
+2: binary => VF or VFL or VT: 1, others: 0
+3: multi-class:
+    VF: 1
+    VFL/VT: 2
+    others: 0
 """
 
 
-def make_label(info, label_method):
-    label = 0
-    if label_method == 0:
-        label = 1 if info.get_last_rhythm_name() == "(VF" else 0
-    elif label_method == 1:
-        label = 1 if info.get_last_rhythm_name() in ("(VF", "(VFL") else 0
-    elif label_method == 2:
-        label = 1 if info.get_last_rhythm_name() in ("(VF", "(VFL", "(VT") else 0
-    if label_method == 3:
-        label = 1 if info.has_rhythm("(VF") else 0
-    elif label_method == 4:
-        label = 1 if (info.has_rhythm("(VF") or info.has_rhythm("(VFL")) else 0
-    elif label_method == 5:
-        label = 1 if (info.has_rhythm("(VF") or info.has_rhythm("(VFL") or info.has_rhythm("(VT")) else 0
-
-    # multi-class: VF, VFL/VT, others
-    if label_method == 6:
-        last_rhythm = info.get_last_rhythm_name()
-        if last_rhythm == "(VF":  # distinguish coarse VF from fine VF
-            label = 1
-        elif last_rhythm in ("(VT", "(VFL"):  # We define VFL as rapid VT here.
-            # VT at 240-300 beats/min is often termed ventricular flutter.
-            # http://emedicine.medscape.com/article/159075-overview
-            label = 2
-        else:  # others
-            label = 0
-
-    return label
+def make_labels(x_data_info, label_method):
+    y_data = array('I')
+    for info in x_data_info:
+        rhythm = info.rhythm
+        label = 0
+        if label_method == "aha":
+            # distinguish subtypes of VT and VF
+            # References for the definition of "coarse":
+            # 1. Foundations of Respiratory Care. by Kenneth A. Wyka，Paul J. Mathews，John Rutkowski
+            #    Chapter 19. p.537
+            #    Quote: "Coarse VF exists when wave amplitude is more than 3 mm."
+            # 2. ECGs Made Easy by Barbara J Aehlert
+            #    p.203
+            #    Quote: "Coarse VF is 3 mm or more in amplitude. Fine VF is less than 3 mm in amplitude."
+            # 3. In AHA recommendations for AED, a peak-to-peak amplitude of 0.2 mV is suggested.
+            if rhythm == "(VF":
+                if info.amplitude > COARSE_VF_THRESHOLD:  # coarse VF
+                    label = SHOCKABLE
+                else:  # fine VF
+                    label = INTERMEDIATE
+            elif rhythm == "(VT":
+                hr = info.get_heart_rate()
+                if hr >= RAPID_VT_RATE:
+                    label = SHOCKABLE
+                elif hr > 0:
+                    label = INTERMEDIATE
+            elif rhythm == "(VFL":  # VFL is VF with HR > 240 BPM, so it's kind of rapid VT
+                label = SHOCKABLE
+        elif label_method == "0":
+            label = 1 if rhythm == "(VF" else 0
+        elif label_method == "1":
+            label = 1 if rhythm in ("(VF", "(VFL") else 0
+        elif label_method == "2":
+            label = 1 if rhythm in ("(VF", "(VFL", "(VT") else 0
+        elif label_method == "3":  # multi-class: VF, VFL/VT, others
+            if rhythm == "(VF":
+                label = 1
+            elif rhythm in ("(VT", "(VFL"):  # We define VFL as rapid VT here.
+                # VT at 240-300 beats/min is often termed ventricular flutter.
+                # http://emedicine.medscape.com/article/159075-overview
+                label = 2
+            else:  # others
+                label = 0
+        y_data.append(label)
+    return np.array(y_data)
 
 
 def main():
@@ -78,23 +106,13 @@ def main():
     parser.add_argument("-p", "--test-percent", type=int, default=30)  # 30% test set size
     parser.add_argument("-b", "--balanced-weight", action="store_true")  # used balanced class weighting
     parser.add_argument("-f", "--features", type=int, nargs="+")  # feature selection
-    parser.add_argument("-l", "--label-method", type=int, default=0, help=label_methods_desc)
-    parser.add_argument("-x", "--exclude-noise", action="store_true", default=False)
-    parser.add_argument("-a", "--aha-test", action="store_true", default=False, help="AHA test for AED (-d, -l, and -x are ignored)")
-    all_db_names = ("mitdb", "vfdb", "cudb", "edb")
-    parser.add_argument("-d", "--db-names", type=str, nargs="+", choices=all_db_names, default=None)
+    parser.add_argument("-l", "--label-method", type=str, default="aha", help=label_methods_desc)
     args = parser.parse_args()
 
     # setup testing parameters
     n_jobs = args.jobs
     if n_jobs == -1 or n_jobs > mp.cpu_count():
         n_jobs = (mp.cpu_count() - 1) if mp.cpu_count() > 1 else 1
-
-    # if we want to perform test based on AHA guideline for AED
-    if args.aha_test:
-        args.exclude_noise = True  # force artifact-free samples
-        args.label_method = None  # ignore --label-method
-        args.db_names = all_db_names  # ignore --db-names
 
     print(args)
     n_test_iters = args.iter
@@ -118,30 +136,17 @@ def main():
 
     # load features
     x_data, x_data_info = load_features(args.input)
-
-    # exclude segments with noises if needed
-    if args.exclude_noise:
-        no_artifact_idx = np.array([i for i, info in enumerate(x_data_info) if not info.has_artifact])
-        x_data = x_data[no_artifact_idx, :]
-        x_data_info = x_data_info[no_artifact_idx]
-
-    # if we only want data from some specified databases
-    if args.db_names:
-        include_idx = [i for i, info in enumerate(x_data_info) if info.record.split("/")[0] in args.db_names]
-        x_data = x_data[include_idx, :]
-        x_data_info = x_data_info[include_idx]
-
     # only select the specified feature
     if selected_features:
         x_data = x_data[:, selected_features]
 
-    if args.aha_test:  # prepare the data for AHA test procedure for AED
-        aha_test = AHATest(x_data, x_data_info)
-        print(aha_test.summary())
-    else:  # label the data for ordinary test cases
-        y_data = np.array([make_label(info, args.label_method) for info in x_data_info])
-        print("Summary:\n", "# of segments:", len(x_data), "# of VT/Vf:", np.sum(y_data), len(x_data_info))
-        x_indicies = list(range(len(x_data)))
+    # encode differnt types of rhythm names into numeric codes for stratified sampling
+    stratification = [info.rhythm for info in x_data_info]
+    label_encoder = preprocessing.LabelEncoder()
+    stratification = label_encoder.fit_transform(stratification)
+
+    # label the samples
+    y_data = make_labels(x_data_info, args.label_method)
 
     # build estimators to test
     estimator_name = args.model
@@ -211,11 +216,12 @@ def main():
     if args.aha_test:
         _csv_fields = ["tpr", "tnr", "ppv", "acc", "tp", "tn", "fp", "fn"]
         csv_fields = []
-        for class_id in aha_test.get_classes():
+        for class_id in aha_classes:
             csv_fields.extend(["{0}[{1}]".format(field, class_id) for field in _csv_fields])
     else:
         csv_fields = ["se", "sp", "ppv", "acc", "se(sp95)", "se(sp97)", "se(sp99)", "tp", "tn", "fp", "fn"]
     csv_fields.extend(sorted(param_grid.keys()))
+    x_indicies = list(range(len(x_data)))
     with open(args.output, "w", newline="", buffering=1) as f:  # buffering=1 means line buffering
         writer = csv.DictWriter(f, fieldnames=csv_fields)
         writer.writeheader()
@@ -224,14 +230,10 @@ def main():
             print(estimator_name, it)
             row = {}
             # Here we split the indicies of the rows rather than the data array itself.
-            if args.aha_test:
-                x_train_idx, x_test_idx, y_train, y_test = aha_test.train_test_split(test_size=test_size)
-                print(len(y_train), len(y_test))
-            else:
-                x_train_idx, x_test_idx, y_train, y_test = cross_validation.train_test_split(x_indicies,
-                                                                                             y_data,
-                                                                                             test_size=test_size,
-                                                                                             stratify=y_data)
+            x_train_idx, x_test_idx, y_train, y_test = cross_validation.train_test_split(x_indicies,
+                                                                                         y_data,
+                                                                                         test_size=test_size,
+                                                                                         stratify=stratification)
             x_train = x_data[x_train_idx]
             x_test = x_data[x_test_idx]
             x_test_info = x_data_info[x_test_idx]
@@ -266,6 +268,8 @@ def main():
                 y_predict = y_predict.flatten()
 
             if args.aha_test or args.label_method >= 6:  # multi-class for AHA clasification scheme
+                print(metrics.classification_report(y_test, y_predict))
+                '''
                 for class_id, result in aha_test.classification_report(y_test, y_predict).items():
                     row["tpr[{0}]".format(class_id)] = result.sensitivity
                     row["tnr[{0}]".format(class_id)] = result.specificity
@@ -275,6 +279,7 @@ def main():
                     row["tn[{0}]".format(class_id)] = result.tn
                     row["fp[{0}]".format(class_id)] = result.fp
                     row["fn[{0}]".format(class_id)] = result.fn
+                '''
             else:  # simple binary classification
                 result = BinaryClassificationResult(y_test, y_predict)
                 row["se"] = result.sensitivity

@@ -22,126 +22,8 @@ RAPID_VT_RATE = 180
 # 0.2 mV is suggested by AHA
 COARSE_VF_THRESHOLD = 0.2
 
-
-rhythm_name_tab = """
-(AFIB	atrial fibrillation
-(AF	atrial fibrillation
-(ASYS	asystole
-(B	ventricular bigeminy
-(BI	first degree heart block
-(HGEA	high grade ventricular ectopic activity
-(N	normal sinus rhythm
-(NSR	normal sinus rhythm
-(NOD	nodal ("AV junctional") rhythm
-(NOISE	noise
-(PM	pacemaker (paced rhythm)
-(SBR	sinus bradycardia
-(SVTA	supraventricular tachyarrhythmia
-(VER	ventricular escape rhythm
-(VF	ventricular fibrillation
-(VFL	ventricular flutter
-(VT ventricular tachycardia
-(AB	Atrial bigeminy
-(AFIB		Atrial fibrillation
-(AFL		Atrial flutter
-(B		Ventricular bigeminy
-(BII		2° heart block
-(IVR		Idioventricular rhythm
-(N		Normal sinus rhythm
-(NOD		Nodal (A-V junctional) rhythm
-(P		Paced rhythm
-(PREX		Pre-excitation (WPW)
-(SBR		Sinus bradycardia
-(SVTA		Supraventricular tachyarrhythmia
-(T		Ventricular trigeminy
-(VT.r	Ventricular tachycardia (rapid)
-(VT.s	Ventricular tachycardia (slow)
-(VT.o	Ventricular tachycardia (other)
-(VF.c	ventricular fibrillation (coarse)
-(VF.f	ventricular fibrillation (fine)
-"""
-rhythm_descriptions = {}
-for line in rhythm_name_tab.strip().split("\n"):
-    cols = line.split("\t", maxsplit=1)
-    if len(cols) > 1:
-        name = cols[0].strip()
-        desc = cols[1].strip()
-        rhythm_descriptions[name] = desc
-
-
-# dataset used for AED testing
-# composed rhythms from the following data sources:
-# mitdb: all rhythms
-# vfdb: all rhythms except VT
-# cudb: all rhythms except NSR
-# edb: all rhythms, especially VT
-# mghdb: only VF and VT
-class Dataset:
-    def __init__(self):
-        pass
-
-    # generator for ECG sample segments
-    def get_samples(self, duration=5.0):
-        sources = [
-            ("mitdb", lambda rhythm: True),
-            ("vfdb", lambda rhythm: rhythm.name != "(VT"),
-            ("cudb", lambda rhythm: rhythm.name != "(N"),
-            ("edb", lambda rhythm: True),
-            ("mghdb", self.check_mghdb_rhythm)
-        ]
-
-        record = vf_data.Record()
-        for db_name, check_rhythm in sources:
-            if db_name == "mghdb":
-                records = ["mgh040", "mgh041", "mgh229", "mgh236", "mgh044", "mgh046", "mgh122"]
-            else:
-                records = vf_data.get_records(db_name)
-            for record_name in records:
-                record.load(db_name, record_name)
-                for rhythm in record.get_artifact_free_rhythms():
-                    if check_rhythm(rhythm):  # if we should enroll this rhythm type
-                        # print(db_name, record_name, rhythm.name)
-                        # perform segmentation for this rhythm
-                        segment_size = int(np.round(duration * rhythm.sampling_rate))
-                        for segment_begin in range(rhythm.begin_time, rhythm.end_time, segment_size):
-                            signals = record.signals[segment_begin:segment_begin + segment_size]
-                            rhythm_name = rhythm.name
-                            # distinguish subtypes of VT and VF
-                            if rhythm_name == "(VF":
-                                # FIXME: max - min only gives a rough estimate of peak-to-peak amplitude here :-(
-                                amplitude = (np.max(signals) - np.min(signals)) / record.gain
-                                if amplitude > COARSE_VF_THRESHOLD:
-                                    rhythm_name = "(VF.c"
-                                else:
-                                    rhythm_name = "(VF.f"
-                            elif rhythm_name == "(VT":
-                                # FIXME: we should get the heart rate of this segment instead
-                                hr = rhythm.get_heart_rate()
-                                if hr == 0:
-                                    rhythm_name = "(VT.o"
-                                elif hr > RAPID_VT_RATE:
-                                    rhythm_name = "(VT.r"
-                                else:
-                                    rhythm_name = "(VT.s"
-
-                            info = vf_data.SegmentInfo(record.name, rhythm.sampling_rate, segment_begin)
-                            yield (rhythm_name, info, signals)
-
-    @staticmethod
-    def check_mghdb_rhythm(rhythm):
-        name = rhythm.name.strip().lower()
-        if name == "vt" or name.startswith("ventricular tac"):
-            rhythm.name = "(VT"
-            return True
-        elif name.startswith("ventricular fib"):
-            rhythm.name = "(VF"
-            return True
-        return False
-
-
 # Test the classifiers with the settings suggested by AHA for AEDs
 class AHATest:
-
     def __init__(self, x_data, x_data_info):
         # prepare the data for AHA test procedure for AED
         coarse_vf_idx = array('i')
@@ -154,6 +36,34 @@ class AHATest:
         y_data = np.zeros(len(x_data))
 
         for i, info in enumerate(x_data_info):  # examine the info of each ECG segment
+            rhythm_name = info.rhythm
+            # distinguish subtypes of VT and VF
+            # References for the definition of "coarse":
+            # 1. Foundations of Respiratory Care. by Kenneth A. Wyka，Paul J. Mathews，John Rutkowski
+            #    Chapter 19. p.537
+            #    Quote: "Coarse VF exists when wave amplitude is more than 3 mm."
+            # 2. ECGs Made Easy by Barbara J Aehlert
+            #    p.203
+            #    Quote: "Coarse VF is 3 mm or more in amplitude. Fine VF is less than 3 mm in amplitude."
+            # 3. In AHA recommendations for AED, a peak-to-peak amplitude of 0.2 mV is suggested.
+            if rhythm_name == "(VF":
+                # FIXME: max - min only gives a rough estimate of peak-to-peak amplitude here :-(
+                amplitude = (np.max(signals) - np.min(signals)) / record.gain
+                if amplitude > COARSE_VF_THRESHOLD:
+                    rhythm_name = "(VF.c"
+                else:
+                    rhythm_name = "(VF.f"
+            elif rhythm_name == "(VT":
+                # FIXME: we should get the heart rate of this segment instead
+                hr = segment_info.get_heart_rate()
+                if hr == 0:
+                    rhythm_name = "(VT.o"
+                elif hr > RAPID_VT_RATE:
+                    rhythm_name = "(VT.r"
+                else:
+                    rhythm_name = "(VT.s"
+            info.rhythm = rhythm_name
+
             last_rhythm = info.get_last_rhythm()
             if last_rhythm:
                 name = last_rhythm.name
