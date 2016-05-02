@@ -21,16 +21,26 @@ def get_records(str db_name):
 
 
 class Rhythm:
-    def __init__(self, str name, int begin_time, int begin_beat):
+    def __init__(self, str name, int sampling_rate, int begin_time, int begin_beat):
         self.name = name
+        self.sampling_rate = sampling_rate
         self.begin_time = begin_time
         self.begin_beat = begin_beat  # valid when beat annotations are available
+        self.end_time = 0
+        self.end_beat = 0  # valid when beat annotations are available
         self.n_beats = 0  # valid when beat annotations are available
-        self.duration = 0.0
+
+    def set_end(self, int end_time, int end_beat = 0):
+        self.end_time = end_time
+        self.end_beat = end_beat
+
+    def get_duration(self):
+        return float(self.end_time - self.begin_time) / self.sampling_rate
 
     # valid only when beat annotations are available
     def get_heart_rate(self):
-        cdef double heart_rate = (self.n_beats / self.duration) * 60 if self.duration else 0.0  # heart rate (beats per minute)
+        cdef double duration = self.get_duration()
+        cdef double heart_rate = (self.n_beats / duration) * 60 if duration else 0.0  # heart rate (beats per minute)
         return heart_rate
 
 
@@ -50,7 +60,7 @@ class SegmentInfo:
         return False
 
     def add_rhythm(self, str name, int begin_time, int begin_beat):
-        self.rhythms.append(Rhythm(name, begin_time, begin_beat))
+        self.rhythms.append(Rhythm(name, self.sampling_rate, begin_time, begin_beat))
 
     def has_transition(self):
         return len(self.rhythms) > 1
@@ -79,7 +89,6 @@ class Segment:
                 next_rhythm = info.rhythms[i + 1] if (i + 1) < n_rhythms else None
 
             end_time = next_rhythm.begin_time if next_rhythm else len(signals)
-            rhythm.duration = float(end_time - rhythm.begin_time) / info.sampling_rate  # duration in terms of second
             if info.n_beats > 0:
                 end_beat = next_rhythm.begin_beat if next_rhythm else info.n_beats
                 rhythm.n_beats = end_beat - rhythm.begin_beat
@@ -175,13 +184,87 @@ class Record:
 
         # read annotations
         annotations = []
-        for ann in wfdb_reader.read_annotations(record_name):
+        ann_name = "atr"
+        if db_name == "mghdb":  # mghdb only contains ari annotation files.
+            ann_name = "ari"
+        for ann in wfdb_reader.read_annotations(record_name, ann_name=ann_name):
             annotation = Annotation(*ann)
             annotations.append(annotation)
         self.annotations = annotations
 
     def get_total_time(self):
         return len(self.signals) / self.sampling_rate
+
+    # parse the annotations of the record to get all of the rhythms with artifacts excluded
+    def get_artifact_free_rhythms(self):
+        rhythms = []
+        cdef list annotations = self.annotations
+        cdef int n_beats = 0  # beat number of current rhythm
+        cdef bint is_mghdb = self.name.startswith("mghdb/")
+        cdef bint in_artifacts = False
+        cdef str rhythm_type = ""
+        # FIXME: create NSR rhythm at the beginning?
+        current_rhythm = None
+        for ann in annotations:
+            if is_mghdb:  # mghdb uses its own annotation format and requires special handling
+                if ann.is_beat_annotation():  # if this is a beat annotation
+                    n_beats += 1
+                else:  # non-beat annotations (rhythm, quality, ...etc.)
+                    pass
+                rhythm_type = ann.get_rhythm_type()
+                if rhythm_type:
+                    if current_rhythm:  # end of current rhythm
+                        current_rhythm.set_end(end_time=ann.time, end_beat=n_beats)
+                        current_rhythm = None
+                    # FIXME: how to handle artifacts?
+                    current_rhythm = Rhythm(rhythm_type, self.sampling_rate, begin_time=ann.time, begin_beat=n_beats)
+                    rhythms.append(current_rhythm)
+            else:  # mitdb like formats (mitdb, vfdb, cudb, edb...)
+                if ann.is_beat_annotation():  # if this is a beat annotation
+                    n_beats += 1
+                else:  # non-beat annotations (rhythm, quality, ...etc.)
+                    code = ann.code
+                    if code == "+":  # rhythm change detected
+                        if current_rhythm:  # end of current rhythm
+                            current_rhythm.set_end(end_time=ann.time, end_beat=n_beats)
+                            current_rhythm = None
+
+                        rhythm_type = ann.get_rhythm_type()
+                        if not rhythm_type.startswith("(NOISE"):
+                            current_rhythm = Rhythm(rhythm_type, self.sampling_rate, begin_time=ann.time, begin_beat=n_beats)
+                            rhythms.append(current_rhythm)
+                    elif code == "[":  # begin of flutter/fibrillation found
+                        if current_rhythm:  # end of current rhythm
+                            current_rhythm.set_end(end_time=ann.time, end_beat=n_beats)
+                            current_rhythm = None
+
+                        # FIXME: some records in cudb only has [ and ] and do not distinguish VF and VFL
+                        # Let's label all of them as VF at the moment
+                        rhythm_type = "(VF"
+                        current_rhythm = Rhythm(rhythm_type, self.sampling_rate, begin_time=ann.time, begin_beat=n_beats)
+                        rhythms.append(current_rhythm)
+                    elif code == "]":  # end of flutter/fibrillation found
+                        if current_rhythm:  # end of current rhythm
+                            current_rhythm.set_end(end_time=ann.time, end_beat=n_beats)
+                            current_rhythm = None
+                    elif code == "!":  # ventricular flutter wave (this annotation is used by mitdb for V flutter beats)
+                        pass
+                    elif code == "|":  # isolated artifact
+                        if current_rhythm:  # end of current rhythm (skip artifact)
+                            current_rhythm.set_end(end_time=ann.time, end_beat=n_beats)
+                            current_rhythm = None
+                    elif code == "~":  # change in quality
+                        if ann.sub_type != 0:  # has noise or unreadable
+                            if current_rhythm:  # end current rhythm to skip noise
+                                current_rhythm.set_end(end_time=ann.time, end_beat=n_beats)
+                                current_rhythm = None
+                        else:  # normal quality restored
+                            if rhythm_type:  # continue from last rhythm type
+                                current_rhythm = Rhythm(rhythm_type, self.sampling_rate, begin_time=ann.time, begin_beat=n_beats)
+                                rhythms.append(current_rhythm)
+        if current_rhythm:  # end the last rhythm
+            current_rhythm.set_end(end_time=len(self.signals), end_beat=n_beats)
+        return rhythms
 
     # perform segmentation (this is a python generator)
     def get_segments(self, double duration=8.0):

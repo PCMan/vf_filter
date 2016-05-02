@@ -51,7 +51,7 @@ for line in rhythm_name_tab.strip().split("\n"):
 
 
 def main():
-    all_db_names = ("mitdb", "vfdb", "cudb")
+    all_db_names = ("mitdb", "vfdb", "cudb", "edb")
     # parse command line arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--db-names", type=str, nargs="+", default=all_db_names)

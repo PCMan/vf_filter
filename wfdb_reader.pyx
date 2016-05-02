@@ -50,12 +50,16 @@ cdef extern from "<wfdb/wfdb.h>":
     FINT getann(WFDB_Annotator a, WFDB_Annotation *annot)
     FSTRING annstr(int annotation_code)
     void wfdbquit()
+    void wfdbquiet()
 
     # constants
     int WFDB_DEFGAIN
     int WFDB_READ
 
 # end of wfdb API declarations
+
+wfdbquiet()  # disable wfdb error output
+
 
 def read_info(str record_name):
     _record_name = bytes(record_name, encoding="ascii")
