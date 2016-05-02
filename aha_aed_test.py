@@ -314,13 +314,28 @@ non-shockable: {nonshock} ({nonshock_p} %)
         return [NON_SHOCKABLE, SHOCKABLE, INTERMEDIATE]
 
 
+# this is a generator function
+def load_all_segments(db_names, segment_duration):
+    idx = 0
+    if db_names[0] == "aha_aed_test":
+        dataset = Dataset()
+        for segment in dataset.get_samples(segment_duration):
+            yield idx, segment
+            idx += 1
+
+
 if __name__ == '__main__':
+    import sys
+    duration = float(sys.argv[1]) if len(sys.argv) > 1 else 8.0
     dataset = Dataset()
     stat = dict()
-    for name, info, signals in dataset.get_samples(8.0):
+    cases = dict()
+    for name, info, signals in dataset.get_samples(duration):
         # print(name, info.record_name, info.begin_time)
         # if info.record_name.startswith("mgh"):
         stat[name] = stat.get(name, 0) + 1
+        cases.setdefault(name, set()).add(info.record_name)
 
     for name in sorted(stat.keys()):
-        print(name, stat[name], rhythm_descriptions.get(name, name))
+        n_cases = len(cases[name])
+        print(name, "\t", stat[name], "\t", n_cases, "\t", rhythm_descriptions.get(name, name))
