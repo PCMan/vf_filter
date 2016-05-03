@@ -52,6 +52,8 @@ rhythm_name_tab = """
 (SBR		Sinus bradycardia
 (SVTA		Supraventricular tachyarrhythmia
 (T		Ventricular trigeminy
+(B3	Third degree heart block
+(SAB	Sino-atrial block
 """
 rhythm_descriptions = {}
 for line in rhythm_name_tab.strip().split("\n"):

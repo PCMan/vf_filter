@@ -91,6 +91,16 @@ def make_labels(x_data_info, label_method):
     return np.array(y_data)
 
 
+def get_sample_weights(y_data):
+    classes = np.unique(y_data)
+    n_classes = [np.sum([y_data == k]) for k in classes]
+    n_total = len(y_data)
+    weights = np.zeros(y_data)
+    for k, n in zip(classes, n_classes):
+        weights[y_data == k] = (n_total / n)
+    return weights
+
+
 def main():
     # parse command line arguments
     parser = argparse.ArgumentParser()
@@ -244,13 +254,11 @@ def main():
 
             fit_params = None
             # try to balance class weighting
-            if args.balanced_weight and not support_class_weight and not (args.aha_test or args.label_method >= 6):
+            if args.balanced_weight and not support_class_weight and not (args.label_method == "aha" or args.label_method == "3"):
                 # perform sample weighting instead if the estimator does not support class weighting
-                n_vf = np.sum(y_data)
-                sample_ratio = (len(y_data) - n_vf) / n_vf  # non-vf/vf ratio
                 weight_arg = "w" if estimator_name.startswith("mlp") else "sample_weight"
                 fit_params = {
-                    weight_arg: np.array([sample_ratio if y == 1 else 1.0 for y in y_train])
+                    weight_arg: np.array(get_sample_weights(y_train))
                 }
 
             grid = grid_search.GridSearchCV(estimator,

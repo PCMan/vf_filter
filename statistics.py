@@ -3,6 +3,7 @@ import pyximport; pyximport.install()
 import vf_data
 import argparse
 
+COARSE_VF_THRESHOLD = 0.2
 
 rhythm_name_tab = """
 (AFIB	atrial fibrillation
@@ -35,6 +36,8 @@ rhythm_name_tab = """
 (SBR		Sinus bradycardia
 (SVTA		Supraventricular tachyarrhythmia
 (T		Ventricular trigeminy
+(B3	Third degree heart block
+(SAB	Sino-atrial block
 (VT.r	Ventricular tachycardia (rapid)
 (VT.s	Ventricular tachycardia (slow)
 (VT.o	Ventricular tachycardia (other)
@@ -51,69 +54,48 @@ for line in rhythm_name_tab.strip().split("\n"):
 
 
 def main():
-    all_db_names = ("mitdb", "vfdb", "cudb", "edb")
     # parse command line arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("-d", "--db-names", type=str, nargs="+", default=all_db_names)
+    parser.add_argument("-d", "--db-names", type=str, nargs="+", default=None)
     # parser.add_argument("-o", "--output", type=str)
-    parser.add_argument("-x", "--exclude-noise", action="store_true", default=False)
     parser.add_argument("-s", "--segment-duration", type=int, default=8)
     args = parser.parse_args()
 
     n_segments = 0
-    all_rhythm_segment_statistics = {}
-    all_rhythm_case_statistics = {}
-    for db_name in args.db_names:
-        print(db_name)
-        rhythm_statistics = {}
-        for record_name in vf_data.get_records(db_name):
-            # load the record_name from the ECG database
-            record = vf_data.Record()
-            record.load(db_name, record_name)
-            rhythms_of_the_record = set()
-            for segment in record.get_segments(args.segment_duration):
-                info = segment.info
-                if args.exclude_noise and info.has_artifact:
-                    continue
+    rhythm_statistics = {}
+    case_statistics = {}
+    dataset = vf_data.DataSet()
+    for segment in dataset.get_samples(args.segment_duration):
+        info = segment.info
+        db_name = info.record_name.split("/", maxsplit=1)[0]
+        if args.db_names and (db_name not in args.db_names):
+            continue
+        rhythm_name = info.rhythm
+        # print(info.record_name, info.begin_time, info.rhythm_types)
+        # distinguish subtypes of VT and VF
+        if rhythm_name == "(VF":
+            if info.amplitude > COARSE_VF_THRESHOLD:  # coarse VF
+                rhythm_name = "(VF.c"
+            else:
+                rhythm_name = "(VF.f"
+        elif rhythm_name == "(VT":
+            hr = info.get_heart_rate()
+            if hr == 0:
+                rhythm_name = "(VT.o"
+            elif hr > 180:
+                rhythm_name = "(VT.r"
+            else:
+                rhythm_name = "(VT.s"
+        rhythm_statistics[rhythm_name] = rhythm_statistics.get(rhythm_name, 0) + 1
+        case_statistics.setdefault(rhythm_name, set()).add(info.record_name)
+        n_segments += 1
 
-                # print(info.record_name, info.begin_time, info.rhythm_types)
-                for rhythm in info.rhythms:
-                    # distinguish subtypes of VT and VF
-                    if rhythm.name == "(VF":
-                        if rhythm.is_coarse:
-                            rhythm.name = "(VF.c"
-                        else:
-                            rhythm.name = "(VF.f"
-                    elif rhythm.name == "(VT":
-                        hr = rhythm.get_heart_rate()
-                        if hr == 0:
-                            rhythm.name = "(VT.o"
-                        elif hr > 180:
-                            rhythm.name = "(VT.r"
-                        else:
-                            rhythm.name = "(VT.s"
-                    rhythm_statistics[rhythm.name] = rhythm_statistics.get(rhythm.name, 0) + 1
-                    rhythms_of_the_record.add(rhythm.name)
-                n_segments += 1
-
-            for rhythm_name in rhythms_of_the_record:
-                all_rhythm_case_statistics[rhythm_name] = all_rhythm_case_statistics.get(rhythm_name, 0) + 1
-
-        for name in sorted(rhythm_statistics.keys()):
-            desc = rhythm_descriptions.get(name, name)
-            n = rhythm_statistics.get(name)
-            print(name, "\t", n, "\t", desc)
-            all_rhythm_segment_statistics[name] = all_rhythm_segment_statistics.get(name, 0) + n
-        print("-" * 80)
-
-    print("Summary")
-    n_rhythms = 0
-    for name in sorted(all_rhythm_segment_statistics.keys()):
+    print("name\tsamples\tcases\tdescription")
+    for name in sorted(rhythm_statistics.keys()):
         desc = rhythm_descriptions.get(name, name)
-        n = all_rhythm_segment_statistics.get(name)
-        n_cases = all_rhythm_case_statistics[name]
-        print(name, "\t", n, "\t", n_cases, "\t", desc)
-        n_rhythms += n
+        n_samples = rhythm_statistics[name]
+        n_cases = len(case_statistics[name])
+        print(name, "\t", n_samples, "\t", n_cases, "\t", desc)
     print("\t", n_segments, "ECG segments")
 
 
