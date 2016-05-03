@@ -19,6 +19,7 @@ NON_SHOCKABLE = 0
 SHOCKABLE = 1
 INTERMEDIATE = 2
 aha_classes = (NON_SHOCKABLE, SHOCKABLE, INTERMEDIATE)
+aha_classe_names = ["non-shockable", "shockable", "intermediate"]
 
 # Use threshold value: 180 BPM to define rapid VT
 # Reference: Nishiyama et al. 2015. Diagnosis of Automated External Defibrillators (JAHA)
@@ -151,9 +152,9 @@ def main():
         x_data = x_data[:, selected_features]
 
     # encode differnt types of rhythm names into numeric codes for stratified sampling later
-    rhythm_types = [info.rhythm for info in x_data_info]
+    y_rhythm_names = [info.rhythm for info in x_data_info]
     label_encoder = preprocessing.LabelEncoder()
-    rhythm_types = label_encoder.fit_transform(rhythm_types)
+    y_rhythm_types = label_encoder.fit_transform(y_rhythm_names)
 
     # label the samples
     y_data = make_labels(x_data_info, args.label_method)
@@ -224,22 +225,25 @@ def main():
 
     # Run the selected test
     if args.label_method == "aha":
-        _csv_fields = ["tpr", "tnr", "ppv", "acc", "tp", "tn", "fp", "fn"]
-        csv_fields = []
-        for class_id in aha_classes:
-            csv_fields.extend(["{0}[{1}]".format(field, class_id) for field in _csv_fields])
+        _csv_fields = ["TPR", "TNR", "PPV"]
+        csv_fields = ["iter"]
+        for class_name in (aha_classe_names + list(label_encoder.classes_)):
+            csv_fields.extend(["{0}[{1}]".format(field, class_name) for field in _csv_fields])
     else:
-        csv_fields = ["se", "sp", "ppv", "acc", "se(sp95)", "se(sp97)", "se(sp99)", "tp", "tn", "fp", "fn"]
+        csv_fields = ["iter", "Se", "Sp", "PPV", "Acc", "Se(Sp95)", "Se(Sp97)", "Se(Sp99)", "TP", "TN", "FP", "FN"]
+
+    # add tuned optimal parameters to the csv file
     csv_fields.extend(sorted(param_grid.keys()))
-    x_indicies = list(range(len(x_data)))
     with open(args.output, "w", newline="", buffering=1) as f:  # buffering=1 means line buffering
+        rows = []
         writer = csv.DictWriter(f, fieldnames=csv_fields)
         writer.writeheader()
         # perform the test for many times
         for it in range(n_test_iters):
             print(estimator_name, it)
-            row = {}
+            row = {"iter" : it}
             # Here we split the indicies of the rows rather than the data array itself.
+            x_indicies = list(range(len(x_data)))
             x_train_idx, x_test_idx, y_train, y_test = cross_validation.train_test_split(x_indicies,
                                                                                          y_data,
                                                                                          test_size=test_size,
@@ -276,29 +280,30 @@ def main():
                 y_predict = y_predict.flatten()
 
             if args.label_method == "aha" or args.label_method == "3":  # multi-class for AHA clasification scheme
-                print(metrics.classification_report(y_test, y_predict))
-                '''
-                for class_id, result in aha_test.classification_report(y_test, y_predict).items():
-                    row["tpr[{0}]".format(class_id)] = result.sensitivity
-                    row["tnr[{0}]".format(class_id)] = result.specificity
-                    row["ppv[{0}]".format(class_id)] = result.precision
-                    row["acc[{0}]".format(class_id)] = result.accuracy
-                    row["tp[{0}]".format(class_id)] = result.tp
-                    row["tn[{0}]".format(class_id)] = result.tn
-                    row["fp[{0}]".format(class_id)] = result.fp
-                    row["fn[{0}]".format(class_id)] = result.fn
-                '''
-                continue
+                results = MultiClassificationResult(y_test, y_predict, classes=aha_classes).results
+                for class_name, result in zip(aha_classe_names, results):
+                    row["TPR[{0}]".format(class_name)] = result.sensitivity
+                    row["TNR[{0}]".format(class_name)] = result.specificity
+                    row["PPV[{0}]".format(class_name)] = result.precision
+
+                # report for each rhythm type (FIXME: is this correct?)
+                for rhythm_id, rhythm_name in enumerate(label_encoder.classes_):
+                    y_test_rhythm_types = y_rhythm_types[x_test_idx]
+                    idx = (y_test_rhythm_types == rhythm_id)
+                    result = BinaryClassificationResult(y_test[idx], y_predict[idx])
+                    row["TPR[{0}]".format(rhythm_name)] = result.sensitivity
+                    row["TNR[{0}]".format(rhythm_name)] = result.specificity
+                    row["PPV[{0}]".format(rhythm_name)] = result.precision
             else:  # simple binary classification
                 result = BinaryClassificationResult(y_test, y_predict)
-                row["se"] = result.sensitivity
-                row["sp"] = result.specificity
-                row["ppv"] = result.precision
-                row["acc"] = result.accuracy
-                row["tp"] = result.tp
-                row["tn"] = result.tn
-                row["fp"] = result.fp
-                row["fn"] = result.fn
+                row["Se"] = result.sensitivity
+                row["Sp"] = result.specificity
+                row["PPV"] = result.precision
+                row["Acc"] = result.accuracy
+                row["TP"] = result.tp
+                row["TN"] = result.tn
+                row["FP"] = result.fp
+                row["FN"] = result.fn
 
                 # prediction with probabilities
                 if hasattr(estimator, "predict_proba"):
@@ -306,19 +311,29 @@ def main():
                     false_pos_rate, true_pos_rate, thresholds = metrics.roc_curve(y_test, y_predict_scores, pos_label=1)
                     # find sensitivity at 95% specificity
                     x = np.searchsorted(false_pos_rate, 0.05)
-                    row["se(sp95)"] = true_pos_rate[x]
+                    row["Se(Sp95)"] = true_pos_rate[x]
 
                     x = np.searchsorted(false_pos_rate, 0.03)
-                    row["se(sp97)"] = true_pos_rate[x]
+                    row["Se(Sp97)"] = true_pos_rate[x]
 
                     x = np.searchsorted(false_pos_rate, 0.01)
-                    row["se(sp99)"] = true_pos_rate[x]
+                    row["Se(Sp99)"] = true_pos_rate[x]
 
             # best parameters of grid search
             row.update(grid.best_params_)
+            rows.append(row)  # remember each row so we can calculate average for them later
 
-            print("  ", ", ".join(["{0}={1}".format(field, row[field]) for field in csv_fields]))
+            print("  ", ", ".join(["{0}={1:.3f}".format(field, row.get(field, "")) for field in csv_fields]))
             writer.writerow(row)
+
+        # calculate average for all iterations automatically and write to csv
+        n_params = len(param_grid)
+        fields = csv_fields[1:-n_params]
+        avg = {"iter": "average"}
+        for field in fields:
+            col = [row[field] for row in rows]
+            avg[field] = np.mean(col)
+        writer.writerow(avg)
 
 
 if __name__ == "__main__":

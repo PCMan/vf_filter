@@ -31,3 +31,18 @@ class BinaryClassificationResult:
         self.tn = tn
         self.fp = fp
         self.fn = fn
+
+
+class MultiClassificationResult:
+    def __init__(self, y_true, y_predict, classes):
+        n = len(y_true)
+        results = []
+        for c in classes:
+            # one-versus all for this class
+            bin_y_true = np.zeros((n, 1))
+            bin_y_true[(y_true == c)] = 1
+            bin_y_predict = np.zeros((n, 1))
+            bin_y_predict[y_predict == c] = 1
+            result = BinaryClassificationResult(bin_y_true, bin_y_predict)
+            results.append(result)
+        self.results = results
