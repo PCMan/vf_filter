@@ -141,8 +141,6 @@ def main():
         x_data = x_data[:, selected_features]
 
     # encode differnt types of rhythm names into numeric codes for stratified sampling later
-    for inf in x_data_info:
-        print(dir(inf))
     rhythm_types = [info.rhythm for info in x_data_info]
     label_encoder = preprocessing.LabelEncoder()
     rhythm_types = label_encoder.fit_transform(rhythm_types)
@@ -215,7 +213,7 @@ def main():
         estimator = mlp.Classifier(layers=layers, batch_size=150)
 
     # Run the selected test
-    if args.aha_test:
+    if args.label_method == "aha":
         _csv_fields = ["tpr", "tnr", "ppv", "acc", "tp", "tn", "fp", "fn"]
         csv_fields = []
         for class_id in aha_classes:
@@ -235,7 +233,7 @@ def main():
             x_train_idx, x_test_idx, y_train, y_test = cross_validation.train_test_split(x_indicies,
                                                                                          y_data,
                                                                                          test_size=test_size,
-                                                                                         stratify=rhythm_types)
+                                                                                         stratify=y_data)
             x_train = x_data[x_train_idx]
             x_test = x_data[x_test_idx]
             x_test_info = x_data_info[x_test_idx]
@@ -269,7 +267,7 @@ def main():
             if estimator_name.startswith("mlp"):  # sknn has different format of output and it needs to be flatten into a 1d array.
                 y_predict = y_predict.flatten()
 
-            if args.aha_test or args.label_method >= 6:  # multi-class for AHA clasification scheme
+            if args.label_method == "aha" or args.label_method == "3":  # multi-class for AHA clasification scheme
                 print(metrics.classification_report(y_test, y_predict))
                 '''
                 for class_id, result in aha_test.classification_report(y_test, y_predict).items():
@@ -282,6 +280,7 @@ def main():
                     row["fp[{0}]".format(class_id)] = result.fp
                     row["fn[{0}]".format(class_id)] = result.fn
                 '''
+                continue
             else:  # simple binary classification
                 result = BinaryClassificationResult(y_test, y_predict)
                 row["se"] = result.sensitivity
