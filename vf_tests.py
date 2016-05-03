@@ -101,8 +101,8 @@ def main():
     parser.add_argument("-o", "--output", type=str, required=True)
     parser.add_argument("-j", "--jobs", type=int, default=-1)
     parser.add_argument("-t", "--iter", type=int, default=1)
-    parser.add_argument("-s", "--scorer", type=str, choices=("ber", "f1", "accuracy", "precision", "f1_weighted"), default="ber")
-    parser.add_argument("-c", "--cv-fold", type=int, default=10)  # 10 fold CV by default
+    parser.add_argument("-s", "--scorer", type=str, choices=("ber", "f1", "accuracy", "precision", "f1_weighted"), default="f1_weighted")
+    parser.add_argument("-c", "--cv-fold", type=int, default=5)  # 5 fold CV by default
     parser.add_argument("-p", "--test-percent", type=int, default=30)  # 30% test set size
     parser.add_argument("-b", "--balanced-weight", action="store_true")  # used balanced class weighting
     parser.add_argument("-f", "--features", type=int, nargs="+")  # feature selection
@@ -140,10 +140,12 @@ def main():
     if selected_features:
         x_data = x_data[:, selected_features]
 
-    # encode differnt types of rhythm names into numeric codes for stratified sampling
-    stratification = [info.rhythm for info in x_data_info]
+    # encode differnt types of rhythm names into numeric codes for stratified sampling later
+    for inf in x_data_info:
+        print(dir(inf))
+    rhythm_types = [info.rhythm for info in x_data_info]
     label_encoder = preprocessing.LabelEncoder()
-    stratification = label_encoder.fit_transform(stratification)
+    rhythm_types = label_encoder.fit_transform(rhythm_types)
 
     # label the samples
     y_data = make_labels(x_data_info, args.label_method)
@@ -233,7 +235,7 @@ def main():
             x_train_idx, x_test_idx, y_train, y_test = cross_validation.train_test_split(x_indicies,
                                                                                          y_data,
                                                                                          test_size=test_size,
-                                                                                         stratify=stratification)
+                                                                                         stratify=rhythm_types)
             x_train = x_data[x_train_idx]
             x_test = x_data[x_test_idx]
             x_test_info = x_data_info[x_test_idx]

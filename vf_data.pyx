@@ -298,7 +298,7 @@ class DataSet:
                         # print(db_name, record_name, rhythm.name)
                         # perform segmentation for this rhythm
                         segment_size = int(np.round(duration * record.sampling_rate))
-                        for segment_begin in range(rhythm.begin_time, rhythm.end_time, segment_size):
+                        for segment_begin in range(rhythm.begin_time, rhythm.end_time - segment_size, segment_size):
                             segment_end = segment_begin + segment_size
                             signals = record.signals[segment_begin:segment_end]
                             segment_info = SegmentInfo(record, rhythm, segment_begin, segment_end)
