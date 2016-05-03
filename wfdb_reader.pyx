@@ -34,24 +34,22 @@ def read_signals(str record_name, int channel=0):
     return n_channels, sampling_rate, gain, np.array(signals)
 
 
-def read_annotations(str record_name, str ann_name="atr", int channel=0):
+def read_annotations(str record_name, str ann_name="atr"):
     # query number of channels in this record_name
     _record_name = bytes(record_name, encoding="ascii")
     cdef int n_channels = isigopen(_record_name, NULL, 0)
     # read annotations
     annotations = []
-    cdef WFDB_Anninfo* ann_info = <WFDB_Anninfo*>malloc(n_channels * sizeof(WFDB_Anninfo))
-    cdef WFDB_Annotation* ann_buf
-    cdef i
+
     _ann_name = bytes(ann_name, encoding="ascii")
-    for i in range(n_channels):
-        ann_info[i].name = _ann_name
-        ann_info[i].stat = WFDB_READ
-    cdef WFDB_Annotation* ann
-    if annopen(_record_name, ann_info, n_channels) == 0:
-        ann_buf = <WFDB_Annotation*>malloc(n_channels * sizeof(WFDB_Annotation))
-        while getann(0, ann_buf) == 0:
-            ann = &ann_buf[channel]  # we only want the specified channel
+    cdef WFDB_Anninfo ann_info
+    cdef WFDB_Annotation ann
+    cdef i
+
+    ann_info.name = _ann_name
+    ann_info.stat = WFDB_READ
+    if annopen(_record_name, &ann_info, 1) == 0:
+        while getann(0, &ann) == 0:
             time = ann.time
             code = str(annstr(<int>ann.anntyp), encoding="ascii")
             sub_type = <int>ann.subtyp
@@ -61,8 +59,6 @@ def read_annotations(str record_name, str ann_name="atr", int channel=0):
                 rhythm_type = str(<char*>ann.aux + 1, encoding="ascii")
             # print(time, code, sub_type, rhythm_type)
             annotations.append((time, code, sub_type, rhythm_type))
-        free(ann_buf)
-    free(ann_info)
     return annotations
 
 

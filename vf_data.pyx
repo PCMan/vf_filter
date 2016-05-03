@@ -130,7 +130,7 @@ class Record:
         self.sampling_rate = 0
         self.gain = 0
 
-    def load(self, str db_name, str record, int channel):
+    def load(self, str db_name, str record, int channel, str annotator):
         record_name = "{0}/{1}".format(db_name, record)
         self.name = record_name
 
@@ -140,10 +140,7 @@ class Record:
 
         # read annotations
         annotations = []
-        ann_name = "atr"
-        if db_name == "mghdb":  # mghdb only contains ari annotation files.
-            ann_name = "ari"
-        for ann in wfdb_reader.read_annotations(record_name, ann_name=ann_name, channel=channel):
+        for ann in wfdb_reader.read_annotations(record_name, ann_name=annotator):
             annotation = Annotation(*ann)
             annotations.append(annotation)
         self.annotations = annotations
@@ -289,12 +286,15 @@ class DataSet:
             if db_name == "mghdb":  # we only use these records from mghdb which contain VF and VT rhythms
                 record_names = ["mgh040", "mgh041", "mgh229", "mgh236", "mgh044", "mgh046", "mgh122"]
                 channel = 1  # lead II is at channel 1 in mghdb
-            else:
+                annotator = "ari"  # mghdb only contains ari annotations
+            else:  # mitdb, vfdb, cudb, edb...etc.
                 record_names = get_records(db_name)
                 channel = 0
+                annotator = "atr"
+
             for record_name in record_names:
                 record = Record()
-                record.load(db_name, record_name, channel=channel)
+                record.load(db_name, record_name, channel=channel, annotator=annotator)
                 for rhythm in record.get_artifact_free_rhythms():
                     if check_rhythm(rhythm):  # if we should enroll this rhythm type
                         # print(db_name, record_name, rhythm.name)
