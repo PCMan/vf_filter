@@ -126,6 +126,7 @@ def main():
     parser.add_argument("-m", "--model", type=str, required=True, choices=estimator_names)
     parser.add_argument("-i", "--input", type=str, required=True)
     parser.add_argument("-o", "--output", type=str, required=True)
+    parser.add_argument("-e", "--error-log", type=str, help="filename of the error log")
     parser.add_argument("-j", "--jobs", type=int, default=-1)
     parser.add_argument("-t", "--iter", type=int, default=1)
     parser.add_argument("-s", "--scorer", type=str, choices=("ber", "f1", "accuracy", "precision", "f1_weighted"), default="f1_weighted")
@@ -255,6 +256,10 @@ def main():
     else:
         csv_fields = ["iter", "Se", "Sp", "PPV", "Acc", "Se(Sp95)", "Se(Sp97)", "Se(Sp99)", "TP", "TN", "FP", "FN"]
 
+    error_logs = None
+    if args.error_log:  # output error log file
+        error_logs = np.zeros((len(x_data), n_test_iters), dtype=int)
+
     # also report the optimal parameters after tuning with CV to the csv file
     csv_fields.extend(sorted(param_grid.keys()))
     with open(args.output, "w", newline="", buffering=1) as f:  # buffering=1 means line buffering
@@ -301,6 +306,11 @@ def main():
             y_predict = grid.predict(x_test)
             if estimator_name.startswith("mlp"):  # sknn has different format of output and it needs to be flatten into a 1d array.
                 y_predict = y_predict.flatten()
+
+            if args.error_log:  # calculate error statistics
+                # find samples that are not correctly predicted in this test set, and mark them in the error log
+                error_idx = np.array(x_test_idx)[(y_test != y_predict)]
+                error_logs[error_idx, it - 1] = 1  # set state of samples with errors to 1 for this iteration
 
             if args.label_method == "aha" or args.label_method == "3":  # multi-class clasification
                 results = MultiClassificationResult(y_test, y_predict, classes=aha_classes).results
@@ -373,6 +383,15 @@ def main():
             avg[field] = np.mean(col)
         writer.writerow(avg)
 
+        # log prediction errors of each sample during the test iterations in a csv file.
+        if args.error_log:
+            with open(args.error_log, "w", newline="") as f:
+                writer = csv.writer(f)
+                fields = ["sample", "record", "begin", "rhythm"] + [str(i) for i in range(1, n_test_iters + 1)] + ["total"]
+                writer.writerow(fields)  # write header for csv
+                for i, info in enumerate(x_data_info):
+                    x_errors = error_logs[i, :]
+                    writer.writerow([(i + 1), info.record_name, info.begin_time, info.rhythm] + list(x_errors) + [np.sum(x_errors)])
 
 if __name__ == "__main__":
     main()
