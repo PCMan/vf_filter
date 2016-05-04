@@ -71,6 +71,7 @@ def make_aha_classes(x_data_info):
         elif rhythm == "(VFL":  # VFL is VF with HR > 240 BPM, so it's kind of rapid VT
             info.rhythm = "(VT,rapid"
 
+
 def make_labels(x_data_info, label_method):
     y_data = array('I')
     for info in x_data_info:
@@ -80,7 +81,7 @@ def make_labels(x_data_info, label_method):
             # distinguish subtypes of VT and VF
             if rhythm == "(VF,coarse":
                 label = SHOCKABLE
-            elif rhythm == "VF,fine":  # fine VF
+            elif rhythm == "(VF,fine":  # fine VF
                 label = INTERMEDIATE
             elif rhythm == "(VT,rapid":
                 label = SHOCKABLE
@@ -301,23 +302,23 @@ def main():
             if estimator_name.startswith("mlp"):  # sknn has different format of output and it needs to be flatten into a 1d array.
                 y_predict = y_predict.flatten()
 
-            if args.label_method == "aha" or args.label_method == "3":  # multi-class for AHA clasification scheme
+            if args.label_method == "aha" or args.label_method == "3":  # multi-class clasification
                 results = MultiClassificationResult(y_test, y_predict, classes=aha_classes).results
                 for class_name, result in zip(aha_classe_names, results):
                     row["TPR[{0}]".format(class_name)] = result.sensitivity
                     row["TNR[{0}]".format(class_name)] = result.specificity
                     row["PPV[{0}]".format(class_name)] = result.precision
 
-                # report for each rhythm type (FIXME: is this correct?)
+                # report performance for each rhythm type (suggested by AHA guideline for AED development)
                 for rhythm_id, rhythm_name in enumerate(label_encoder.classes_):
                     y_test_rhythm_types = y_rhythm_types[x_test_idx]
                     idx = (y_test_rhythm_types == rhythm_id)
                     rhythm_y_test = y_test[idx]
                     rhythm_y_predict = y_predict[idx]
-                    # convert to binary classification
+                    # convert to binary classification for each type of arrythmia
                     bin_y_test = np.zeros((len(rhythm_y_test), 1))
                     bin_y_predict = np.zeros((len(rhythm_y_predict), 1))
-                    if rhythm_name in shockable_rhythms:
+                    if rhythm_name in shockable_rhythms:  # for shockable rhythms, report sensitivity (TPR)
                         if rhythm_name == "(VF,coarse" or rhythm_name == "(VT,rapid":
                             target = SHOCKABLE
                         else:
@@ -326,7 +327,7 @@ def main():
                         bin_y_predict[rhythm_y_predict == target] = 1
                         result = BinaryClassificationResult(bin_y_test, bin_y_predict)
                         row["Se[{0}]".format(rhythm_name)] = result.sensitivity
-                    else:
+                    else:  # for non-shockable rhythms, report specificity (TNR)
                         bin_y_test[rhythm_y_test == NON_SHOCKABLE] = 1
                         bin_y_predict[rhythm_y_predict == NON_SHOCKABLE] = 1
                         result = BinaryClassificationResult(bin_y_test, bin_y_predict)
@@ -359,9 +360,9 @@ def main():
             # best parameters of grid search
             row.update(grid.best_params_)
             rows.append(row)  # remember each row so we can calculate average for them later
-
-            # print("  ", ", ".join(["{0}={1:.3}".format(field, row.get(field, 0.0)) for field in csv_fields]))
+            print("\n".join(["\t{0} = {1}".format(field, row.get(field, 0.0)) for field in csv_fields[1:]]))
             writer.writerow(row)
+            print("-" * 80)
 
         # calculate average for all iterations automatically and write to csv
         n_params = len(param_grid)
