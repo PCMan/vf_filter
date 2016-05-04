@@ -112,7 +112,7 @@ def get_sample_weights(y_data):
     classes = np.unique(y_data)
     n_classes = [np.sum([y_data == k]) for k in classes]
     n_total = len(y_data)
-    weights = np.zeros(y_data)
+    weights = np.zeros(y_data.shape)
     for k, n in zip(classes, n_classes):
         weights[y_data == k] = (n_total / n)
     return weights
