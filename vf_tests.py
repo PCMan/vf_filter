@@ -286,7 +286,7 @@ def main():
 
             fit_params = None
             # try to balance class weighting
-            if args.balanced_weight and not support_class_weight and not (args.label_method == "aha" or args.label_method == "3"):
+            if args.balanced_weight and not support_class_weight:
                 # perform sample weighting instead if the estimator does not support class weighting
                 weight_arg = "w" if estimator_name.startswith("mlp") else "sample_weight"
                 fit_params = {
