@@ -4,40 +4,37 @@
 HOST=`hostname`
 case $HOST in
 "csbb01")
-	label=2
+    models="adaboost"
 	;;
 "csbb02")
-	label=5
+    models="random_forest"
 	;;
 "csbb23")
-	label=1
+    models="gradient_boosting"
 	;;
 "csbb24")
-	label=3
+    models="mlp2"
 	;;
 "csbb25")
-	label=4
+    models="svc mlp1"
 	;;
 "arch-pc")
-	label=0
+    models="logistic_regression"
 	;;
 esac
 
-input_features="features/features_s8_r250.dat"
 iter=100
-cv=10
-for model in logistic_regression svc random_forest gradient_boosting adaboost;
+for seg_size in 5 8 10;
 do
-    for scoring in ber accuracy;
+    input_features="features/features_s"$seg_size"_r250.dat"
+    for model in "$models";
     do
-        output="reports/"$model"_cv10_"$scoring"_s8_label"$label"_exclude_cudb.csv"
-        if [ ! -f "$output" ]; then
-            ./vf_tests.py -b -i "$input_features" -t $iter -x -m $model -l $label -c $cv -s $scoring -d vfdb mitdb -o "$output"
-        fi
-
-        output="reports/"$model"_cv5_"$scoring"_s8_label"$label"_all_db.csv"
-        if [ ! -f "$output" ]; then
-            ./vf_tests.py -b -i "$input_features" -t $iter -x -m $model -l $label -c $cv -s $scoring -o "$output"
-        fi
+        for scoring in f1_weighted accuracy;
+        do
+            timestamp=`date +%s`  # add current timestamp as suffix to prevent filename duplication
+            output="aha/"$model","$scoring",s8."$timestamp".csv"
+            error_log="aha/"$model","$scoring",s8_errors."$timestamp".csv"
+            ./vf_tests.py -b -i "$input_features" -t $iter -m $model -l aha -s $scoring -e "$error_log" -o "$output"
+        done
     done
 done
