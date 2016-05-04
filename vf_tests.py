@@ -20,6 +20,7 @@ SHOCKABLE = 1
 INTERMEDIATE = 2
 aha_classes = (NON_SHOCKABLE, SHOCKABLE, INTERMEDIATE)
 aha_classe_names = ["non-shockable", "shockable", "intermediate"]
+shockable_rhythms = ("(VF", "(VT", "(VFL")
 
 # Use threshold value: 180 BPM to define rapid VT
 # Reference: Nishiyama et al. 2015. Diagnosis of Automated External Defibrillators (JAHA)
@@ -225,10 +226,14 @@ def main():
 
     # Run the selected test
     if args.label_method == "aha":
-        _csv_fields = ["TPR", "TNR", "PPV"]
         csv_fields = ["iter"]
-        for class_name in (aha_classe_names + list(label_encoder.classes_)):
-            csv_fields.extend(["{0}[{1}]".format(field, class_name) for field in _csv_fields])
+        for class_name in aha_classe_names:
+            csv_fields.extend(["{0}[{1}]".format(field, class_name) for field in ("TPR", "TNR", "PPV")])
+        for class_name in label_encoder.classes_:
+            if class_name in shockable_rhythms:  # shockable rhythms
+                csv_fields.append("Se[{0}]".format(class_name))
+            else:  # other non-shockable rhythms
+                csv_fields.append("Sp[{0}]".format(class_name))
     else:
         csv_fields = ["iter", "Se", "Sp", "PPV", "Acc", "Se(Sp95)", "Se(Sp97)", "Se(Sp99)", "TP", "TN", "FP", "FN"]
 
@@ -290,10 +295,21 @@ def main():
                 for rhythm_id, rhythm_name in enumerate(label_encoder.classes_):
                     y_test_rhythm_types = y_rhythm_types[x_test_idx]
                     idx = (y_test_rhythm_types == rhythm_id)
-                    result = BinaryClassificationResult(y_test[idx], y_predict[idx])
-                    row["TPR[{0}]".format(rhythm_name)] = result.sensitivity
-                    row["TNR[{0}]".format(rhythm_name)] = result.specificity
-                    row["PPV[{0}]".format(rhythm_name)] = result.precision
+                    rhythm_y_test = y_test[idx]
+                    rhythm_y_predict = y_predict[idx]
+                    # convert to binary classification
+                    bin_y_test = np.zeros((len(rhythm_y_test), 1))
+                    bin_y_predict = np.zeros((len(rhythm_y_predict), 1))
+                    if rhythm_name in shockable_rhythms:
+                        bin_y_test[rhythm_y_test != NON_SHOCKABLE] = 1
+                        bin_y_predict[rhythm_y_predict != NON_SHOCKABLE] = 1
+                        result = BinaryClassificationResult(bin_y_test, bin_y_predict)
+                        row["Se[{0}]".format(rhythm_name)] = result.sensitivity
+                    else:
+                        bin_y_test[rhythm_y_test == NON_SHOCKABLE] = 1
+                        bin_y_predict[rhythm_y_predict == NON_SHOCKABLE] = 1
+                        result = BinaryClassificationResult(bin_y_test, bin_y_predict)
+                        row["Sp[{0}]".format(rhythm_name)] = result.sensitivity
             else:  # simple binary classification
                 result = BinaryClassificationResult(y_test, y_predict)
                 row["Se"] = result.sensitivity
@@ -323,7 +339,7 @@ def main():
             row.update(grid.best_params_)
             rows.append(row)  # remember each row so we can calculate average for them later
 
-            print("  ", ", ".join(["{0}={1:.3f}".format(field, row.get(field, "")) for field in csv_fields]))
+            # print("  ", ", ".join(["{0}={1:.3}".format(field, row.get(field, 0.0)) for field in csv_fields]))
             writer.writerow(row)
 
         # calculate average for all iterations automatically and write to csv
