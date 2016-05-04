@@ -27,7 +27,7 @@ iter=100
 for seg_size in 5 8 10;
 do
     input_features="features/features_s"$seg_size"_r250.dat"
-    for model in "$models";
+    for model in $models;
     do
         for scoring in f1_weighted accuracy;
         do
