@@ -255,14 +255,14 @@ def main():
     else:
         csv_fields = ["iter", "Se", "Sp", "PPV", "Acc", "Se(Sp95)", "Se(Sp97)", "Se(Sp99)", "TP", "TN", "FP", "FN"]
 
-    # add tuned optimal parameters to the csv file
+    # also report the optimal parameters after tuning with CV to the csv file
     csv_fields.extend(sorted(param_grid.keys()))
     with open(args.output, "w", newline="", buffering=1) as f:  # buffering=1 means line buffering
         rows = []
         writer = csv.DictWriter(f, fieldnames=csv_fields)
         writer.writeheader()
         # perform the test for many times
-        for it in range(n_test_iters):
+        for it in range(1, n_test_iters + 1):
             print(estimator_name, it)
             row = {"iter" : it}
             # Here we split the indicies of the rows rather than the data array itself.
