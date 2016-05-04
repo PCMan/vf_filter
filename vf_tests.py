@@ -20,7 +20,7 @@ SHOCKABLE = 1
 INTERMEDIATE = 2
 aha_classes = (NON_SHOCKABLE, SHOCKABLE, INTERMEDIATE)
 aha_classe_names = ["non-shockable", "shockable", "intermediate"]
-shockable_rhythms = ("(VF", "(VT", "(VFL")
+shockable_rhythms = ("(VF", "(VT", "(VFL", "(VF,coarse", "(VF,fine", "(VT,rapid", "(VT,slow")
 
 # Use threshold value: 180 BPM to define rapid VT
 # Reference: Nishiyama et al. 2015. Diagnosis of Automated External Defibrillators (JAHA)
@@ -45,6 +45,31 @@ aha: multi-class based on AHA guideline for AED:
     others: 0
 """
 
+def make_aha_classes(x_data_info):
+    for info in x_data_info:
+        rhythm = info.rhythm
+        # distinguish subtypes of VT and VF
+        # References for the definition of "coarse":
+        # 1. Foundations of Respiratory Care. by Kenneth A. Wyka，Paul J. Mathews，John Rutkowski
+        #    Chapter 19. p.537
+        #    Quote: "Coarse VF exists when wave amplitude is more than 3 mm."
+        # 2. ECGs Made Easy by Barbara J Aehlert
+        #    p.203
+        #    Quote: "Coarse VF is 3 mm or more in amplitude. Fine VF is less than 3 mm in amplitude."
+        # 3. In AHA recommendations for AED, a peak-to-peak amplitude of 0.2 mV is suggested.
+        if rhythm == "(VF":
+            if info.amplitude > COARSE_VF_THRESHOLD:  # coarse VF
+                info.rhythm += ",coarse"
+            else:  # fine VF
+                info.rhythm += ",fine"
+        elif rhythm == "(VT":
+            hr = info.get_heart_rate()
+            if hr >= RAPID_VT_RATE:
+                info.rhythm += ",rapid"
+            elif hr > 0:
+                info.rhythm += ",slow"
+        elif rhythm == "(VFL":  # VFL is VF with HR > 240 BPM, so it's kind of rapid VT
+            info.rhythm = "(VT,rapid"
 
 def make_labels(x_data_info, label_method):
     y_data = array('I')
@@ -53,27 +78,16 @@ def make_labels(x_data_info, label_method):
         label = 0
         if label_method == "aha":
             # distinguish subtypes of VT and VF
-            # References for the definition of "coarse":
-            # 1. Foundations of Respiratory Care. by Kenneth A. Wyka，Paul J. Mathews，John Rutkowski
-            #    Chapter 19. p.537
-            #    Quote: "Coarse VF exists when wave amplitude is more than 3 mm."
-            # 2. ECGs Made Easy by Barbara J Aehlert
-            #    p.203
-            #    Quote: "Coarse VF is 3 mm or more in amplitude. Fine VF is less than 3 mm in amplitude."
-            # 3. In AHA recommendations for AED, a peak-to-peak amplitude of 0.2 mV is suggested.
-            if rhythm == "(VF":
-                if info.amplitude > COARSE_VF_THRESHOLD:  # coarse VF
-                    label = SHOCKABLE
-                else:  # fine VF
-                    label = INTERMEDIATE
-            elif rhythm == "(VT":
-                hr = info.get_heart_rate()
-                if hr >= RAPID_VT_RATE:
-                    label = SHOCKABLE
-                elif hr > 0:
-                    label = INTERMEDIATE
-            elif rhythm == "(VFL":  # VFL is VF with HR > 240 BPM, so it's kind of rapid VT
+            if rhythm == "(VF,coarse":
                 label = SHOCKABLE
+            elif rhythm == "VF,fine":  # fine VF
+                label = INTERMEDIATE
+            elif rhythm == "(VT,rapid":
+                label = SHOCKABLE
+            elif rhythm == "(VT,slow":
+                label = INTERMEDIATE
+            else:
+                label = NON_SHOCKABLE
         elif label_method == "0":
             label = 1 if rhythm == "(VF" else 0
         elif label_method == "1":
@@ -151,6 +165,9 @@ def main():
     # only select the specified feature
     if selected_features:
         x_data = x_data[:, selected_features]
+
+    if args.label_method == "aha":  # distinguish subtypes of VT and VF
+        make_aha_classes(x_data_info)
 
     # encode differnt types of rhythm names into numeric codes for stratified sampling later
     y_rhythm_names = [info.rhythm for info in x_data_info]
@@ -301,8 +318,12 @@ def main():
                     bin_y_test = np.zeros((len(rhythm_y_test), 1))
                     bin_y_predict = np.zeros((len(rhythm_y_predict), 1))
                     if rhythm_name in shockable_rhythms:
-                        bin_y_test[rhythm_y_test != NON_SHOCKABLE] = 1
-                        bin_y_predict[rhythm_y_predict != NON_SHOCKABLE] = 1
+                        if rhythm_name == "(VF,coarse" or rhythm_name == "(VT,rapid":
+                            target = SHOCKABLE
+                        else:
+                            target = INTERMEDIATE
+                        bin_y_test[rhythm_y_test == target] = 1
+                        bin_y_predict[rhythm_y_predict == target] = 1
                         result = BinaryClassificationResult(bin_y_test, bin_y_predict)
                         row["Se[{0}]".format(rhythm_name)] = result.sensitivity
                     else:
