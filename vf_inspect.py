@@ -1,30 +1,23 @@
 #!/usr/bin/env python3
 import pyximport; pyximport.install()
 import vf_features
-import pickle
+import vf_data
 import numpy as np
 import matplotlib.pyplot as plt
 import sys
+import argparse
+import csv
 
 
 def main():
-    # load errors
-    error_logs = (
-        "gb_errors.txt",
-        "log_reg_errors.txt",
-        "rf_errors.txt",
-        "svc_errors.txt"
-    )
+    # parse command line arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-d", "--db-names", type=str, nargs="+", default=None)
+    # parser.add_argument("-o", "--output", type=str)
+    parser.add_argument("-s", "--segment-duration", type=int, default=8)
+    args = parser.parse_args()
 
-    all_errors = {}
-    for error_log in error_logs:
-        with open(error_log, "r") as f:
-            for line in f:
-                error_idx = (int(line.strip()))
-                all_errors[error_idx] = all_errors.get(error_idx, 0) + 1
 
-    common_errors = sorted([idx for idx in all_errors if all_errors[idx] == len(error_logs)])
-    print("# of common errors in all classifiers:", len(common_errors))
 
     segments_cache_name = "all_segments.dat"
     # load cached segments if they exist

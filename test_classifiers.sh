@@ -1,5 +1,7 @@
 #!/bin/bash
 
+. /usr/bin/setwfdb
+
 # test with all database
 HOST=`hostname`
 case $HOST in

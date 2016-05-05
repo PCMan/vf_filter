@@ -118,6 +118,73 @@ def get_sample_weights(y_data):
     return weights
 
 
+def create_estimator(estimator_name, class_weight):
+    estimator = None
+    param_grid = None
+    support_class_weight = False
+
+    if estimator_name == "logistic_regression":
+        from sklearn import linear_model
+        estimator = linear_model.LogisticRegression(class_weight=class_weight)
+        param_grid = {
+            "C": np.logspace(-4, 4, 10)
+        }
+        support_class_weight = True
+    elif estimator_name == "random_forest":
+        estimator = ensemble.RandomForestClassifier(class_weight=class_weight)
+        param_grid = {
+            "n_estimators": list(range(10, 110, 10))
+        }
+        support_class_weight = True
+    elif estimator_name == "gradient_boosting":
+        estimator = ensemble.GradientBoostingClassifier(learning_rate=0.1)
+        param_grid = {
+            "n_estimators": list(range(150, 250, 10)),
+            "max_depth": list(range(3, 8))
+        }
+    elif estimator_name == "adaboost":
+        estimator = ensemble.AdaBoostClassifier()
+        param_grid = {
+            "n_estimators": list(range(30, 150, 10)),
+            "learning_rate": np.logspace(-1, 0, 2)
+        }
+    elif estimator_name == "svc":
+        from sklearn import svm
+        estimator = svm.SVC(shrinking=False,
+                            cache_size=2048,
+                            verbose=False,
+                            probability=True,
+                            class_weight=class_weight)
+        param_grid = {
+            "C": np.logspace(0, 1, 2),
+            "gamma": np.logspace(-2, -1, 2)
+        }
+        support_class_weight = True
+    elif estimator_name == "mlp1" or estimator_name == "mlp2":  # multiple layer perceptron neural network
+        from sknn import mlp
+        param_grid = {
+            "learning_rate": [0.0001],
+            "regularize": ["l2"],  # , "dropout"],
+            "weight_decay": np.logspace(-6, -5, 2),  # parameter for L2 regularizer
+            "hidden0__type": ["Tanh"]  # "Rectifier", "Sigmoid"
+        }
+
+        layers = [mlp.Layer(type="Tanh", name="hidden0")]
+        # add the second hidden layer as needed
+        if estimator_name == "mlp2":  # 2 hidden layer
+            layers.append(mlp.Layer(type="Tanh", name="hidden1"))
+            param_grid["hidden0__units"] = list(range(2, 5, 1))
+            param_grid["hidden1__units"] = list(range(2, 5, 1))
+            param_grid["hidden1__type"] = ["Tanh"]  # "Rectifier", "Sigmoid"
+        else:
+            param_grid["hidden0__units"] = list(range(5, 26, 1))
+        # add the output layer
+        layers.append(mlp.Layer("Softmax"))
+        estimator = mlp.Classifier(layers=layers, batch_size=150)
+
+    return estimator, param_grid, support_class_weight
+
+
 def main():
     # parse command line arguments
     parser = argparse.ArgumentParser()
@@ -179,71 +246,11 @@ def main():
     # label the samples
     y_data = make_labels(x_data_info, args.label_method)
 
-    # build estimators to test
+    # build estimator to test
     estimator_name = args.model
-    estimator = None
-    param_grid = None
-    support_class_weight = False
-    if estimator_name == "logistic_regression":
-        from sklearn import linear_model
-        estimator = linear_model.LogisticRegression(class_weight=class_weight)
-        param_grid = {
-            "C": np.logspace(-4, 4, 10)
-        }
-        support_class_weight = True
-    elif estimator_name == "random_forest":
-        estimator = ensemble.RandomForestClassifier(class_weight=class_weight)
-        param_grid = {
-            "n_estimators": list(range(10, 110, 10))
-        }
-        support_class_weight = True
-    elif estimator_name == "gradient_boosting":
-        estimator = ensemble.GradientBoostingClassifier(learning_rate=0.1)
-        param_grid = {
-            "n_estimators": list(range(150, 250, 10)),
-            "max_depth": list(range(3, 8))
-        }
-    elif estimator_name == "adaboost":
-        estimator = ensemble.AdaBoostClassifier()
-        param_grid = {
-            "n_estimators": list(range(30, 150, 10)),
-            "learning_rate": np.logspace(-1, 0, 2)
-        }
-    elif estimator_name == "svc":
-        from sklearn import svm
-        estimator = svm.SVC(shrinking=False,
-                            cache_size=2048,
-                            verbose=False,
-                            probability=True,
-                            class_weight=class_weight)
-        param_grid = {
-            "C": np.logspace(0, 1, 2),
-            "gamma": np.logspace(-2, -1, 2)
-        }
-        support_class_weight = True
-    elif estimator_name == "mlp1" or estimator_name == "mlp2":  # multiple layer perceptron neural network
-        from sknn import mlp
-        param_grid = {
-            "learning_rate": [0.0001],
-            "regularize": ["l2"],  # , "dropout"],
-            "weight_decay": np.logspace(-6, -5, 2),  # parameter for L2 regularizer
-            "hidden0__type": ["Tanh"]  # "Rectifier", "Sigmoid"
-        }
+    estimator, param_grid, support_class_weight = create_estimator(estimator_name, class_weight)
 
-        layers = [mlp.Layer(type="Tanh", name="hidden0")]
-        # add the second hidden layer as needed
-        if estimator_name == "mlp2":  # 2 hidden layer
-            layers.append(mlp.Layer(type="Tanh", name="hidden1"))
-            param_grid["hidden0__units"] = list(range(2, 5, 1))
-            param_grid["hidden1__units"] = list(range(2, 5, 1))
-            param_grid["hidden1__type"] = ["Tanh"]  # "Rectifier", "Sigmoid"
-        else:
-            param_grid["hidden0__units"] = list(range(5, 26, 1))
-        # add the output layer
-        layers.append(mlp.Layer("Softmax"))
-        estimator = mlp.Classifier(layers=layers, batch_size=150)
-
-    # Run the selected test
+    # generate field names for the output csv file
     if args.label_method == "aha":
         csv_fields = ["iter"]
         for class_name in aha_classe_names:
@@ -256,6 +263,7 @@ def main():
     else:
         csv_fields = ["iter", "Se", "Sp", "PPV", "Acc", "Se(Sp95)", "Se(Sp97)", "Se(Sp99)", "TP", "TN", "FP", "FN"]
 
+    # prepare a matrix to store the error states of each sample during test iterations
     error_logs = None
     if args.error_log:  # output error log file
         error_logs = np.zeros((len(x_data), n_test_iters), dtype=int)
@@ -293,6 +301,7 @@ def main():
                     weight_arg: np.array(get_sample_weights(y_train))
                 }
 
+            # find best parameters using grid search + cross validation
             grid = grid_search.GridSearchCV(estimator,
                                             param_grid,
                                             fit_params=fit_params,
@@ -301,19 +310,22 @@ def main():
                                             cv=n_cv_folds,
                                             verbose=0)
 
-            # perform the classification test
+            # perform the classification training
             grid.fit(x_train, y_train)
+
+            # predict using the trained estimator
             y_predict = grid.predict(x_test)
             if estimator_name.startswith("mlp"):  # sknn has different format of output and it needs to be flatten into a 1d array.
                 y_predict = y_predict.flatten()
 
-            if args.error_log:  # calculate error statistics
+            if args.error_log:  # calculate error statistics for each sample
                 # find samples that are not correctly predicted in this test set, and mark them in the error log
                 included_idx = np.array(x_test_idx)
                 error_idx = included_idx[(y_test != y_predict)]
                 error_logs[included_idx, it - 1] = 1  # set state of all included samples to 1 for this iteration
                 error_logs[error_idx, it - 1] = -1  # set state of samples with errors to -1
 
+            # output the result of classification to csv file
             if args.label_method == "aha" or args.label_method == "3":  # multi-class clasification
                 results = MultiClassificationResult(y_test, y_predict, classes=aha_classes).results
                 for class_name, result in zip(aha_classe_names, results):
