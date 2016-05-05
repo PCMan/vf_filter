@@ -137,7 +137,8 @@ def create_estimator(estimator_name, class_weight):
         }
         support_class_weight = True
     elif estimator_name == "gradient_boosting":
-        estimator = ensemble.GradientBoostingClassifier(learning_rate=0.1)
+        import xgboost.sklearn as xgb
+        estimator = xgb.XGBClassifier(learning_rate=0.1)
         param_grid = {
             "n_estimators": list(range(150, 250, 10)),
             "max_depth": list(range(3, 8))
