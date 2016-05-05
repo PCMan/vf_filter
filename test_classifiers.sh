@@ -23,6 +23,8 @@ case $HOST in
 	;;
 esac
 
+mkdir -p aha
+
 iter=100
 for seg_size in 5 8 10;
 do

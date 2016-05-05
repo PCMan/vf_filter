@@ -309,8 +309,10 @@ def main():
 
             if args.error_log:  # calculate error statistics
                 # find samples that are not correctly predicted in this test set, and mark them in the error log
-                error_idx = np.array(x_test_idx)[(y_test != y_predict)]
-                error_logs[error_idx, it - 1] = 1  # set state of samples with errors to 1 for this iteration
+                included_idx = np.array(x_test_idx)
+                error_idx = included_idx[(y_test != y_predict)]
+                error_logs[included_idx, it - 1] = 1  # set state of all included samples to 1 for this iteration
+                error_logs[error_idx, it - 1] = -1  # set state of samples with errors to -1
 
             if args.label_method == "aha" or args.label_method == "3":  # multi-class clasification
                 results = MultiClassificationResult(y_test, y_predict, classes=aha_classes).results
@@ -387,11 +389,27 @@ def main():
         if args.error_log:
             with open(args.error_log, "w", newline="") as f:
                 writer = csv.writer(f)
-                fields = ["sample", "record", "begin", "rhythm"] + [str(i) for i in range(1, n_test_iters + 1)] + ["total"]
+                fields = ["sample", "record", "begin", "rhythm"] + [str(i) for i in range(1, n_test_iters + 1)] + ["tested", "errors", "error rate"]
                 writer.writerow(fields)  # write header for csv
                 for i, info in enumerate(x_data_info):
                     x_errors = error_logs[i, :]
-                    writer.writerow([(i + 1), info.record_name, info.begin_time, info.rhythm] + list(x_errors) + [np.sum(x_errors)])
+                    row = [(i + 1), info.record_name, info.begin_time, info.rhythm]
+                    n_included = 0
+                    n_errors = 0
+                    for state in x_errors:
+                        if state == 0:  # not included in this iteration of test
+                            row.append("")
+                        else:
+                            n_included += 1
+                            if state == 1:  # correctly predicted
+                                row.append("0")
+                            elif state == -1:  # error
+                                row.append("1")
+                                n_errors += 1
+                    row.append(n_included)  # number of test iterations in which this sample x is included
+                    row.append(n_errors)  # number of errors
+                    row.append(n_errors / n_included if n_included > 0 else "N/A")  # error rate for this sample
+                    writer.writerow(row)
 
 if __name__ == "__main__":
     main()
