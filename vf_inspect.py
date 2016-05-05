@@ -5,6 +5,7 @@ import vf_data
 import argparse
 import csv
 from collections import deque
+from datetime import timedelta
 
 
 MAX_QUEUE_SIZE = 50
@@ -51,7 +52,7 @@ def main():
     # load features and info of the samples
     x_data, x_data_info = vf_features.load_features(args.features)
 
-    fields = ["sample", "rhythm", "tested", "errors", "error rate"]
+    fields = ["sample", "record", "begin", "rhythm", "tested", "errors", "error rate"]
     errors = []
     with open(args.input, "r") as f:
         reader = csv.DictReader(f)
@@ -67,12 +68,18 @@ def main():
     errors.sort(key=lambda item: item["error rate"], reverse=True)
 
     # output the errors
+    fields.append("time")
     for error in errors:
-        print(", ".join([error[field] for field in fields]))
-        sample_id = int(error["sample"])
+        sample_idx = int(error["sample"]) - 1
+        x_features = x_data[sample_idx]
+        info = x_data_info[sample_idx]
 
-        x_features = x_data[sample_id]
-        info = x_data_info[sample_id]
+        # convert sample count to time
+        sample_time = timedelta(seconds=(info.begin_time / info.sampling_rate))
+        error["time"] = sample_time
+
+        print(", ".join(["{0}: {1}".format(field, error[field]) for field in fields]))
+
         for name, feature in zip(vf_features.feature_names, x_features):
             print("{0}: {1}".format(name, feature))
         print("-" * 80)
