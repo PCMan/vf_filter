@@ -37,7 +37,7 @@ do
         do
             timestamp=`date +%s`  # add current timestamp as suffix to prevent filename duplication
             output="aha/"$model","$scoring",s8."$timestamp".csv"
-            error_log="aha/"$model","$scoring",s8_errors."$timestamp".csv"
+            error_log="aha/"$model","$scoring",s"$seg_size"_errors."$timestamp".csv"
             ./vf_tests.py -b -i "$input_features" -t $iter -m $model -l aha -s $scoring -e "$error_log" -o "$output"
         done
     done
