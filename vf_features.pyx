@@ -288,7 +288,7 @@ cdef double hilbert_psr(np.ndarray[double, ndim=1] samples, int sampling_rate):
 
 # Bandpass filter:
 # http://scipy.github.io/old-wiki/pages/Cookbook/ButterworthBandpass
-cdef np.ndarray[double, ndim=1] butter_bandpass_filter(np.ndarray[double, ndim=1] data, double lowcut, double highcut, double fs, int order=5):
+cpdef np.ndarray[double, ndim=1] butter_bandpass_filter(np.ndarray[double, ndim=1] data, double lowcut, double highcut, double fs, int order=5):
     cdef double nyq = 0.5 * fs
     cdef double low = lowcut / nyq
     cdef double high = highcut / nyq
@@ -298,7 +298,7 @@ cdef np.ndarray[double, ndim=1] butter_bandpass_filter(np.ndarray[double, ndim=1
     return y
 
 
-cdef np.ndarray[double, ndim=1] moving_average(np.ndarray[double, ndim=1] samples, int order=5):
+cpdef np.ndarray[double, ndim=1] moving_average(np.ndarray[double, ndim=1] samples, int order=5):
     # Reference: https://www.otexts.org/fpp/6/2
     # Moving average can be calculated using convolution
     # http://matlabtricks.com/post-11/moving-average-by-convolution

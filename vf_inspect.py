@@ -6,6 +6,9 @@ import argparse
 import csv
 from collections import deque
 from datetime import timedelta
+import scipy as sp
+import numpy as np
+import matplotlib.pyplot as plt
 
 
 MAX_QUEUE_SIZE = 50
@@ -40,6 +43,79 @@ def load_record(record_name):
     return record
 
 
+def plot_sample(info, signals):
+    n_samples = len(signals)
+    figure, axes = plt.subplots(3, 2)  # sharex=True
+    ax = axes[0, 0]
+    ax.set_title("before preprocessing")
+    ax.plot(signals)
+
+    # plot DFT spectrum
+    fft = np.fft.fft(signals * sp.signal.hamming(n_samples))
+    fft_freq = np.fft.fftfreq(n_samples)
+    # We only need the left half of the FFT result (with frequency > 0)
+    n_fft = int(np.ceil(n_samples / 2))
+    fft = fft[0:n_fft]
+    fft_freq = fft_freq[0:n_fft]
+    amplitude = np.abs(fft)
+    fft_freq_hz = fft_freq * info.sampling_rate
+    ax = axes[0, 1]
+    ax.set_title("DFT (before preprocessing)")
+    ax.plot(fft_freq_hz, np.log(amplitude))
+
+    # normalize the input ECG sequence
+    signals = signals.astype("float64") # convert to float
+    signals = (signals - np.min(signals)) / (np.max(signals) - np.min(signals))
+
+    # perform mean subtraction
+    signals = signals - np.mean(signals)
+
+    # 5-order moving average
+    signals = vf_features.moving_average(signals, order=5)
+    ax = axes[1, 0]
+    ax.set_title("moving average")
+    ax.plot(signals)
+
+    # band pass filter
+    signals = vf_features.butter_bandpass_filter(signals, 0.5, 30, info.sampling_rate)
+    ax = axes[2, 0]
+    ax.set_title("band pass filter")
+    ax.plot(signals)
+    ax.axhline(y=0.2, color="r")  # draw a horizontal line at 0.2
+
+    # FIXME: do we need to perform resample here?
+
+    # plot DFT spectrum
+    fft = np.fft.fft(signals * sp.signal.hamming(n_samples))
+    fft_freq = np.fft.fftfreq(n_samples)
+    # We only need the left half of the FFT result (with frequency > 0)
+    n_fft = int(np.ceil(n_samples / 2))
+    fft = fft[0:n_fft]
+    fft_freq = fft_freq[0:n_fft]
+    amplitude = np.abs(fft)
+    fft_freq_hz = fft_freq * info.sampling_rate
+
+    ax = axes[1, 1]
+    ax.set_title("DFT (after preprocessing)")
+    ax.plot(fft_freq_hz, np.log(amplitude))
+    peak_freq_idx = np.argmax(fft)
+    peak_freq = fft_freq[peak_freq_idx] * info.sampling_rate
+    ax.axvline(x=peak_freq, color="r")
+    print(peak_freq, amplitude[peak_freq_idx])
+
+    # plot spectrogram for SPEC, M, and A2
+    # amplitudes[amplitudes < (0.05 * peak_amplitude)] = 0
+
+
+
+    # maximize the window
+    # Reference: http://stackoverflow.com/questions/12439588/how-to-maximize-a-plt-show-window-using-python
+    fm = plt.get_current_fig_manager()
+    if hasattr(fm, "window") and hasattr(fm.window, "showMaximized"):
+        fm.window.showMaximized()
+    plt.show()
+
+
 def main():
     # parse command line arguments
     parser = argparse.ArgumentParser()
@@ -47,6 +123,8 @@ def main():
     parser.add_argument("-f", "--features", type=str, required=True)
     parser.add_argument("-p", "--plot", action="store_true", default=False)
     parser.add_argument("-t", "--threshold", type=float, default=0.25)
+    parser.add_argument("-r", "--rhythms", type=str, nargs="+")
+    parser.add_argument("-d", "--db-names", type=str, nargs="+")
     args = parser.parse_args()
 
     # load features and info of the samples
@@ -57,6 +135,20 @@ def main():
     with open(args.input, "r") as f:
         reader = csv.DictReader(f)
         for row in reader:
+            # we only want to inspect these types of rhythms
+            if args.rhythms and row["rhythm"] not in args.rhythms:
+                continue
+
+            # we only want to inspect records of these databases
+            if args.db_names:
+                allowed = False
+                for db_name in args.db_names:
+                    if row["record"].startswith(db_name):
+                        allowed = True
+                        break
+                if not allowed:
+                    continue
+
             try:
                 error_rate = float(row["error rate"])
                 if error_rate > args.threshold:
@@ -87,7 +179,8 @@ def main():
         if args.plot:
             record = load_record(info.record_name)
             signals = record.signals[info.begin_time:info.end_time]
-            vf_features.preprocessing(signals, info.sampling_rate, plotting=True)
+            plot_sample(info, signals)
+
 
 if __name__ == '__main__':
     main()
