@@ -193,11 +193,6 @@ def main():
         if args.plot:
             record = load_record(info.record_name)
             signals = record.signals[info.begin_time:info.end_time]
-
-            # perform resample to 250 Hz
-            if info.sampling_rate != 250:
-                signals = sp.signal.resample(signals, int(info.get_duration() * 250))
-                info.sampling_rate = 250
             plot_sample(info, signals)
 
 
