@@ -330,7 +330,12 @@ cdef double vf_leak(np.ndarray[double, ndim=1] samples, np.ndarray[double comple
 
 
 # spectral parameters (M and A2)
-cdef tuple spectral_features(np.ndarray[double complex, ndim=1] fft, np.ndarray[double, ndim=1] fft_freq, int sampling_rate):
+cpdef tuple spectral_features(np.ndarray[double complex, ndim=1] fft, np.ndarray[double, ndim=1] fft_freq, int sampling_rate, plot=None):
+    # Reference: BioMedical Engineering OnLine 2005, 4:60
+    # The ECG of most normal heart rhythms is a broadband signal with major harmonics up to about 25 Hz.
+    # During VF, the ECG becomes concentrated in a band of frequencies between 3 and 10 Hz, with particularly
+    # low frequencies of undercooled victims.
+
     # Find the peak frequency within the range of 0.5 Hz - 9.0 Hz
     # NOTE: the unit of time is sample number, so the unit of frequency is not Hz here
     # to convert to Hz, we have to multiply the frequencies with sample rate.
@@ -370,6 +375,16 @@ cdef tuple spectral_features(np.ndarray[double complex, ndim=1] fft, np.ndarray[
     cdef double sum_amplitudes = np.sum(amplitudes[0:max_spec_idx])
     if sum_amplitudes != 0:  # in theory, division by zero should not happen here
         a2 = np.sum(amplitudes[min_a2_idx:max_a2_idx]) / sum_amplitudes
+
+    # plot on a matplotlib.pyplot object
+    if plot:
+        plot.set_title("Spectral parameters")
+        plot.plot(fft_freq * sampling_rate, amplitudes, color="k")
+        plot.axvline(x=spec_max_freq * sampling_rate, color="r")
+        plot.axvline(x=peak_freq * sampling_rate, color="r")
+        plot.axvline(x=spec_max_freq * sampling_rate, color="b")
+        plot.axvline(x=fft_freq[min_a2_idx] * sampling_rate, color="g")
+        plot.axvline(x=fft_freq[max_a2_idx] * sampling_rate, color="g")
 
     return (spectral_moment, a2)
 

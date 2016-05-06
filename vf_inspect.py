@@ -61,7 +61,7 @@ def plot_sample(info, signals):
     fft_freq_hz = fft_freq * info.sampling_rate
     ax = axes[0, 1]
     ax.set_title("DFT (before preprocessing)")
-    ax.plot(fft_freq_hz, np.log(amplitude))
+    ax.plot(fft_freq_hz, amplitude)
 
     # normalize the input ECG sequence
     signals = signals.astype("float64") # convert to float
@@ -83,8 +83,6 @@ def plot_sample(info, signals):
     ax.plot(signals)
     ax.axhline(y=0.2, color="r")  # draw a horizontal line at 0.2
 
-    # FIXME: do we need to perform resample here?
-
     # plot DFT spectrum
     fft = np.fft.fft(signals * sp.signal.hamming(n_samples))
     fft_freq = np.fft.fftfreq(n_samples)
@@ -97,16 +95,13 @@ def plot_sample(info, signals):
 
     ax = axes[1, 1]
     ax.set_title("DFT (after preprocessing)")
-    ax.plot(fft_freq_hz, np.log(amplitude))
-    peak_freq_idx = np.argmax(fft)
+    ax.plot(fft_freq_hz, amplitude)
+    peak_freq_idx = np.argmax(amplitude)
     peak_freq = fft_freq[peak_freq_idx] * info.sampling_rate
     ax.axvline(x=peak_freq, color="r")
-    print(peak_freq, amplitude[peak_freq_idx])
 
     # plot spectrogram for SPEC, M, and A2
-    # amplitudes[amplitudes < (0.05 * peak_amplitude)] = 0
-
-
+    vf_features.spectral_features(fft, fft_freq, info.sampling_rate, plot=axes[2, 1])
 
     # maximize the window
     # Reference: http://stackoverflow.com/questions/12439588/how-to-maximize-a-plt-show-window-using-python
@@ -160,6 +155,12 @@ def main():
     errors.sort(key=lambda item: item["error rate"], reverse=True)
 
     # output the errors
+    print("{0} samples have error rate > {1}".format(len(errors) , args.threshold))
+    for error in errors:
+        print(", ".join([error[field] for field in fields]))
+    print("-" * 80, "\n")
+    # TODO: perform statistics for each rhythm type and record?
+
     fields.append("time")
     for error in errors:
         sample_idx = int(error["sample"]) - 1
@@ -172,13 +173,31 @@ def main():
 
         print(", ".join(["{0}: {1}".format(field, error[field]) for field in fields]))
 
+        # list each feature
+        comments = {
+            "TCSC": "(VF: > 48 for high Sp, 25-35 for high Se)",
+            "TCI": "(SR: > 400)",
+            "HILB": "(VF: > 0.15)",
+            "PSR": "(VF: > 0.15)",
+            "VF": "(VF: < 26/64 = {0}".format(26 / 64),
+            "M": "(VF: <= 1.55)",
+            "A2": "(VF: >= 0.45)",
+            "LZ": "(SR: < 0.15, VT: 0.15 - 0.486, VF: > 0.486)",
+            "SpEn": "(VF: > 0.25)"
+        }
         for name, feature in zip(vf_features.feature_names, x_features):
-            print("{0}: {1}".format(name, feature))
+            print("{0}: {1}\t{2}".format(name, feature, comments.get(name, "")))
         print("-" * 80)
+
         # plot the signals
         if args.plot:
             record = load_record(info.record_name)
             signals = record.signals[info.begin_time:info.end_time]
+
+            # perform resample to 250 Hz
+            if info.sampling_rate != 250:
+                signals = sp.signal.resample(signals, int(info.get_duration() * 250))
+                info.sampling_rate = 250
             plot_sample(info, signals)
 
 
