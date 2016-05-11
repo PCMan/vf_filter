@@ -4,6 +4,7 @@
 
 # test with all database
 HOST=`hostname`
+n_jobs=-1
 case $HOST in
 "csbb01")
     models="adaboost"
@@ -13,6 +14,8 @@ case $HOST in
 	;;
 "csbb23")
     models="gradient_boosting"
+    # xgboost already uses all available CPU threads so let's avoid multi-processing here.
+    n_jobs=1
 	;;
 "csbb24")
     models="mlp2"
@@ -38,7 +41,7 @@ do
             timestamp=`date +%s`  # add current timestamp as suffix to prevent filename duplication
             output="aha/"$model","$scoring",s"$seg_size"."$timestamp".csv"
             error_log="aha/"$model","$scoring",s"$seg_size"_errors."$timestamp".csv"
-            ./vf_tests.py -b -i "$input_features" -t $iter -m $model -l aha -s $scoring -e "$error_log" -o "$output"
+            ./vf_tests.py -j $n_jobs -b -i "$input_features" -t $iter -m $model -l aha -s $scoring -e "$error_log" -o "$output"
         done
     done
 done
