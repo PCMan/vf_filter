@@ -203,6 +203,7 @@ def main():
     parser.add_argument("-b", "--balanced-weight", action="store_true")  # used balanced class weighting
     parser.add_argument("-f", "--features", type=int, nargs="+")  # feature selection
     parser.add_argument("-l", "--label-method", type=str, default="aha", help=label_methods_desc)
+    parser.add_argument("-x", "---exclude-asystole", action="store_true")  # exclude asystole from the test
     args = parser.parse_args()
 
     # setup testing parameters
@@ -235,6 +236,12 @@ def main():
     # only select the specified feature
     if selected_features:
         x_data = x_data[:, selected_features]
+
+    # exclude samples with asystole from the test
+    if args.exclude_asystole:
+        asystole_idx = np.array([i for i, info in enumerate(x_data_info) if info.rhythm == "(ASYS"])
+        x_data = np.delete(x_data, asystole_idx, axis=0)
+        x_data_info = np.delete(x_data_info, asystole_idx, axis=0)
 
     if args.label_method == "aha":  # distinguish subtypes of VT and VF
         make_aha_classes(x_data_info)
