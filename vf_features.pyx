@@ -214,7 +214,6 @@ cdef double modified_exponential(np.ndarray[double, ndim=1] samples, int samplin
 # http://biomedical-engineering-online.biomedcentral.com/articles/10.1186/1475-925X-9-43
 cdef double mean_absolute_value(np.ndarray[double, ndim=1] samples, int sampling_rate, double window_duration=2.0):
     # pre-processing: mean subtraction
-    # FIXME: the samples we got here already received normalization, which is different from that in the original paper
     cdef int n_samples = len(samples)
     mavs = array("d")
     cdef int window_size = int(sampling_rate * window_duration)
@@ -225,6 +224,8 @@ cdef double mean_absolute_value(np.ndarray[double, ndim=1] samples, int sampling
     while window_end <= n_samples:
         # normalization within the window
         window_samples = samples[window_begin:window_end]
+        # get the absolute values of the signals, and then normalize using max abs value.
+        window_samples = np.abs(window_samples)
         window_samples /= np.max(window_samples)
         mavs.append(np.mean(window_samples))
         # move to next frame
@@ -288,6 +289,7 @@ cdef double hilbert_psr(np.ndarray[double, ndim=1] samples, int sampling_rate):
 
 # Bandpass filter:
 # http://scipy.github.io/old-wiki/pages/Cookbook/ButterworthBandpass
+"""
 cpdef np.ndarray[double, ndim=1] butter_bandpass_filter(np.ndarray[double, ndim=1] data, double lowcut, double highcut, double fs, int order=5):
     cdef double nyq = 0.5 * fs
     cdef double low = lowcut / nyq
@@ -295,6 +297,27 @@ cpdef np.ndarray[double, ndim=1] butter_bandpass_filter(np.ndarray[double, ndim=
     cdef np.ndarray[double, ndim = 1] b, a
     b, a = signal.butter(order, [low, high], btype='band')
     cdef np.ndarray[double, ndim=1] y = signal.lfilter(b, a, data)
+    return y
+"""
+
+
+cpdef np.ndarray[double, ndim=1] drift_supression(np.ndarray[double, ndim=1] data, double cutoff_freq, double sampling_rate):
+    # low pass filter for drift supression
+    # Reference: https://homepages.fhv.at/ku/karl/VF/filtering.m
+    cdef double T = 1.0 / sampling_rate  # sampling peroid [s]
+    cdef double c1 = 1.0 / (1.0 + np.tan(cutoff_freq * np.pi * T))
+    cdef double c2 = (1.0 - np.tan(cutoff_freq * np.pi * T)) / (1 + np.tan(cutoff_freq * np.pi * T))
+    cdef list b = [c1, -c1]
+    cdef list a = [1.0, -c2]
+    return signal.filtfilt(b, a, data)
+
+
+cpdef np.ndarray[double, ndim=1] butter_lowpass_filter(np.ndarray[double, ndim=1] data, double highcut_freq, double fs, int order=5):
+    cdef double nyq = 0.5 * fs
+    cdef double high = highcut_freq / nyq
+    cdef np.ndarray[double, ndim = 1] b, a
+    b, a = signal.butter(order, high, btype="lowpass")
+    cdef np.ndarray[double, ndim=1] y = signal.filtfilt(b, a, data)
     return y
 
 
@@ -477,8 +500,11 @@ cpdef np.ndarray[double, ndim=1] preprocessing(object src_samples, int sampling_
         ax[1].set_title("moving average")
         ax[1].plot(samples)
 
+    # low pass filter for drift supression
+    samples = drift_supression(samples, 1, sampling_rate)
+
     # band pass filter
-    samples = butter_bandpass_filter(samples, 0.5, 30, sampling_rate)
+    samples = butter_lowpass_filter(samples, 30, sampling_rate)
     if plotting:
         ax[2].set_title("band pass filter")
         ax[2].plot(samples)

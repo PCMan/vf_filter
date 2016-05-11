@@ -45,7 +45,7 @@ def load_record(record_name):
 
 def plot_sample(info, signals):
     n_samples = len(signals)
-    figure, axes = plt.subplots(3, 2)  # sharex=True
+    figure, axes = plt.subplots(4, 2)  # sharex=True
     ax = axes[0, 0]
     ax.set_title("before preprocessing")
     ax.plot(signals)
@@ -76,9 +76,15 @@ def plot_sample(info, signals):
     ax.set_title("moving average")
     ax.plot(signals)
 
-    # band pass filter
-    signals = vf_features.butter_bandpass_filter(signals, 0.5, 30, info.sampling_rate)
+    # drift supression
+    signals = vf_features.drift_supression(signals, 1, info.sampling_rate)
     ax = axes[2, 0]
+    ax.set_title("drift supression")
+    ax.plot(signals)
+
+    # band pass filter
+    signals = vf_features.butter_lowpass_filter(signals, 30, info.sampling_rate)
+    ax = axes[3, 0]
     ax.set_title("band pass filter")
     ax.plot(signals)
     ax.axhline(y=0.2, color="r")  # draw a horizontal line at 0.2
