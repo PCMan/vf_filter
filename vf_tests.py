@@ -203,7 +203,7 @@ def main():
     parser.add_argument("-b", "--balanced-weight", action="store_true")  # used balanced class weighting
     parser.add_argument("-f", "--features", type=int, nargs="+")  # feature selection
     parser.add_argument("-l", "--label-method", type=str, default="aha", help=label_methods_desc)
-    parser.add_argument("-x", "---exclude-asystole", action="store_true")  # exclude asystole from the test
+    parser.add_argument("-x", "--exclude-asystole", action="store_true")  # exclude asystole from the test
     args = parser.parse_args()
 
     # setup testing parameters
