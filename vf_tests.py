@@ -262,7 +262,7 @@ def main():
     if args.label_method == "aha":
         csv_fields = ["iter"]
         for class_name in aha_classe_names:
-            csv_fields.extend(["{0}[{1}]".format(field, class_name) for field in ("TPR", "TNR", "PPV")])
+            csv_fields.extend(["{0}[{1}]".format(field, class_name) for field in ("Se", "Sp", "precision")])
         for class_name in label_encoder.classes_:
             if class_name in shockable_rhythms:  # shockable rhythms
                 csv_fields.append("Se[{0}]".format(class_name))
@@ -272,9 +272,10 @@ def main():
         csv_fields = ["iter", "Se", "Sp", "PPV", "Acc", "Se(Sp95)", "Se(Sp97)", "Se(Sp99)", "TP", "TN", "FP", "FN"]
 
     # prepare a matrix to store the error states of each sample during test iterations
-    error_logs = None
+    predict_results = None
     if args.error_log:  # output error log file
-        error_logs = np.zeros((len(x_data), n_test_iters), dtype=int)
+        # 2D table to store test results: initialize all fields with -1
+        predict_results = np.full(shape=(len(x_data), n_test_iters), fill_value=-1, dtype=int)
 
     # also report the optimal parameters after tuning with CV to the csv file
     csv_fields.extend(sorted(param_grid.keys()))
@@ -327,19 +328,16 @@ def main():
                 y_predict = y_predict.flatten()
 
             if args.error_log:  # calculate error statistics for each sample
-                # find samples that are not correctly predicted in this test set, and mark them in the error log
-                included_idx = np.array(x_test_idx)
-                error_idx = included_idx[(y_test != y_predict)]
-                error_logs[included_idx, it - 1] = 1  # set state of all included samples to 1 for this iteration
-                error_logs[error_idx, it - 1] = -1  # set state of samples with errors to -1
+                included_idx = np.array(x_test_idx)  # samples included in this test iteration
+                predict_results[included_idx, it - 1] = y_predict  # remember prediction results of all included samples
 
             # output the result of classification to csv file
             if args.label_method == "aha" or args.label_method == "3":  # multi-class clasification
                 results = MultiClassificationResult(y_test, y_predict, classes=aha_classes).results
                 for class_name, result in zip(aha_classe_names, results):
-                    row["TPR[{0}]".format(class_name)] = result.sensitivity
-                    row["TNR[{0}]".format(class_name)] = result.specificity
-                    row["PPV[{0}]".format(class_name)] = result.precision
+                    row["Se[{0}]".format(class_name)] = result.sensitivity
+                    row["Sp[{0}]".format(class_name)] = result.specificity
+                    row["precision[{0}]".format(class_name)] = result.precision
 
                 # report performance for each rhythm type (suggested by AHA guideline for AED development)
                 for rhythm_id, rhythm_name in enumerate(label_encoder.classes_):
@@ -409,26 +407,34 @@ def main():
         if args.error_log:
             with open(args.error_log, "w", newline="") as f:
                 writer = csv.writer(f)
-                fields = ["sample", "record", "begin", "rhythm"] + [str(i) for i in range(1, n_test_iters + 1)] + ["tested", "errors", "error rate"]
+                fields = ["sample", "record", "begin", "rhythm"] + [str(i) for i in range(1, n_test_iters + 1)] + ["tested", "errors", "error rate", "class", "predict"]
                 writer.writerow(fields)  # write header for csv
                 for i, info in enumerate(x_data_info):
-                    x_errors = error_logs[i, :]
+                    label = y_data[i]
+                    x_predict_results = predict_results[i, :]  # prediction results of all iterations for this sample x
                     row = [(i + 1), info.record_name, info.begin_time, info.rhythm]
                     n_included = 0
                     n_errors = 0
-                    for state in x_errors:
-                        if state == 0:  # not included in this iteration of test
+                    for y_predict in x_predict_results:
+                        if y_predict == -1:  # not included in this iteration of test
                             row.append("")
                         else:
                             n_included += 1
-                            if state == 1:  # correctly predicted
-                                row.append("0")
-                            elif state == -1:  # error
-                                row.append("1")
+                            row.append(y_predict)
+                            if y_predict != label:  # prediction error in this iteration
                                 n_errors += 1
                     row.append(n_included)  # number of test iterations in which this sample x is included
                     row.append(n_errors)  # number of errors
                     row.append(n_errors / n_included if n_included > 0 else "N/A")  # error rate for this sample
+                    row.append(label)  # correct class of the sample
+                    # most frequently predicted class
+                    if n_included > 0:
+                        classes, freq = np.unique(x_predict_results[x_predict_results != -1], return_counts=True)
+                        # find the prediction result with highest frequency
+                        most_frequent_predict = classes[np.argmax(freq)]
+                    else:  # the sample is excluded from all of the test iterations.
+                        most_frequent_predict = "N/A"
+                    row.append(most_frequent_predict)
                     writer.writerow(row)
 
 if __name__ == "__main__":
