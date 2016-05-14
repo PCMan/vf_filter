@@ -10,10 +10,12 @@ import scipy as sp
 import numpy as np
 import matplotlib.pyplot as plt
 
-
 MAX_QUEUE_SIZE = 50
-
 record_cache = deque()  # a simple LRU cache for loaded records
+
+NON_SHOCKABLE = 0
+SHOCKABLE = 1
+INTERMEDIATE = 2
 
 
 def load_record(record_name):
@@ -45,9 +47,12 @@ def load_record(record_name):
 
 def plot_sample(info, signals):
     n_samples = len(signals)
+    signals = signals.astype("float64") / info.gain  # convert from digital value to analogue amplitude (mV)
+
     figure, axes = plt.subplots(4, 2)  # sharex=True
     ax = axes[0, 0]
     ax.set_title("before preprocessing")
+    ax.set_ylabel("amplitude (mV)")
     ax.plot(signals)
 
     # plot DFT spectrum
@@ -79,13 +84,13 @@ def plot_sample(info, signals):
     # drift supression
     signals = vf_features.drift_supression(signals, 1, info.sampling_rate)
     ax = axes[2, 0]
-    ax.set_title("drift supression")
+    ax.set_title("drift supression (cutoff: 1 Hz)")
     ax.plot(signals)
 
     # band pass filter
     signals = vf_features.butter_lowpass_filter(signals, 30, info.sampling_rate)
     ax = axes[3, 0]
-    ax.set_title("band pass filter")
+    ax.set_title("Butterworth high pass filter (cutoff: 30Hz)")
     ax.plot(signals)
     ax.axhline(y=0.2, color="r")  # draw a horizontal line at 0.2
 
@@ -109,6 +114,18 @@ def plot_sample(info, signals):
     # plot spectrogram for SPEC, M, and A2
     vf_features.spectral_features(fft, fft_freq, info.sampling_rate, plot=axes[2, 1])
 
+    # plot cepstrum
+    amplitude = np.abs(fft)
+    cepstrum = np.abs(np.fft.ifft(np.log(amplitude)))
+    cepstrum = cepstrum[0:int(len(cepstrum) / 2)]
+    # high pass liftering
+    cutoff = 60.0 / 400 * info.sampling_rate  # max possible HR: 400 BPM => min period: 60/400
+    cepstrum[0:cutoff] = 0
+
+    ax = axes[3, 1]
+    ax.set_title("cepstrum")
+    ax.plot(cepstrum)
+
     # maximize the window
     # Reference: http://stackoverflow.com/questions/12439588/how-to-maximize-a-plt-show-window-using-python
     fm = plt.get_current_fig_manager()
@@ -123,15 +140,16 @@ def main():
     parser.add_argument("-i", "--input", type=str, required=True)
     parser.add_argument("-f", "--features", type=str, required=True)
     parser.add_argument("-p", "--plot", action="store_true", default=False)
-    parser.add_argument("-t", "--threshold", type=float, default=0.25)
+    parser.add_argument("-t", "--threshold", type=float, default=0.0)
     parser.add_argument("-r", "--rhythms", type=str, nargs="+")
     parser.add_argument("-d", "--db-names", type=str, nargs="+")
+    parser.add_argument("-c", "--critical-error", action="store_true")  # only inspect critical errors (shockable/non-shockable flip errors)
     args = parser.parse_args()
 
     # load features and info of the samples
     x_data, x_data_info = vf_features.load_features(args.features)
 
-    fields = ["sample", "record", "begin", "rhythm", "tested", "errors", "error rate"]
+    fields = ["sample", "record", "begin", "rhythm", "tested", "errors", "error rate", "class", "predict"]
     errors = []
     with open(args.input, "r") as f:
         reader = csv.DictReader(f)
@@ -139,6 +157,17 @@ def main():
             # we only want to inspect these types of rhythms
             if args.rhythms and row["rhythm"] not in args.rhythms:
                 continue
+
+            # we only want to inspect critical errors which are:
+            # shockable/intermediate rhythm predicted as non-shockable, or vice versa
+            if args.critical_error:
+                predict = row["predict"]
+                if predict != "N/A":
+                    predict = int(predict)
+                    actual = int(row["class"])
+                    is_critical = (actual != NON_SHOCKABLE and predict == NON_SHOCKABLE) or (actual == NON_SHOCKABLE and predict != NON_SHOCKABLE)
+                    if not is_critical:
+                        continue
 
             # we only want to inspect records of these databases
             if args.db_names:
