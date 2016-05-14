@@ -192,7 +192,10 @@ def main():
     # output the errors
     print("{0} samples have error rate > {1}".format(len(errors) , args.threshold))
     for error in errors:
-        print(", ".join([error[field] for field in fields]))
+        sample_idx = int(error["sample"]) - 1
+        info = x_data_info[sample_idx]
+        sample_time = timedelta(seconds=(info.begin_time / info.sampling_rate))
+        print(", ".join([error[field] for field in fields]), ", time:", sample_time)
     print("-" * 80, "\n")
     # TODO: perform statistics for each rhythm type and record?
 
