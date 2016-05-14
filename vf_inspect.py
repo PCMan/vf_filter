@@ -144,6 +144,7 @@ def main():
     parser.add_argument("-r", "--rhythms", type=str, nargs="+")
     parser.add_argument("-d", "--db-names", type=str, nargs="+")
     parser.add_argument("-c", "--critical-error", action="store_true")  # only inspect critical errors (shockable/non-shockable flip errors)
+    parser.add_argument("-a", "--patients", type=str, nargs="+")
     args = parser.parse_args()
 
     # load features and info of the samples
@@ -165,7 +166,7 @@ def main():
                 if predict != "N/A":
                     predict = int(predict)
                     actual = int(row["class"])
-                    is_critical = (actual != NON_SHOCKABLE and predict == NON_SHOCKABLE) or (actual == NON_SHOCKABLE and predict != NON_SHOCKABLE)
+                    is_critical = (actual != NON_SHOCKABLE and predict == NON_SHOCKABLE) or (actual == NON_SHOCKABLE and predict == SHOCKABLE)
                     if not is_critical:
                         continue
 
@@ -177,6 +178,10 @@ def main():
                         allowed = True
                         break
                 if not allowed:
+                    continue
+
+            if args.patients:  # we only want to inspect these patients
+                if row["record"] not in args.patients:
                     continue
 
             try:
