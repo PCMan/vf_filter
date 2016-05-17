@@ -145,10 +145,25 @@ def main():
     parser.add_argument("-d", "--db-names", type=str, nargs="+")
     parser.add_argument("-c", "--critical-error", action="store_true")  # only inspect critical errors (shockable/non-shockable flip errors)
     parser.add_argument("-a", "--patients", type=str, nargs="+")
+    parser.add_argument("-u", "--update-labels", type=str)  # try to override incorrect labels
     args = parser.parse_args()
+
+    # manually corrections for incorrect labels coming from annotations of the original dataset
+    corrections = {}
+    corrections_changed = False
+    if args.update_labels:  # if we're going to update incorrect labels
+        # read the label amendment file
+        with open(args.update_labels, "r") as f:
+            for line in f:
+                parts = line.strip().split()
+                if len(parts) != 3:
+                    continue
+                record_name, begin_time, correct_label = parts
+                corrections[(record_name, int(begin_time))] = correct_label
 
     # load features and info of the samples
     x_data, x_data_info = vf_features.load_features(args.features)
+    sample_ids = {(info.record_name, info.begin_time): idx for idx, info in enumerate(x_data_info)}
 
     fields = ["sample", "record", "begin", "rhythm", "tested", "errors", "error rate", "class", "predict"]
     errors = []
@@ -197,7 +212,8 @@ def main():
     # output the errors
     print("{0} samples have error rate > {1}".format(len(errors) , args.threshold))
     for error in errors:
-        sample_idx = int(error["sample"]) - 1
+        # sample_idx = int(error["sample"]) - 1
+        sample_idx = sample_ids[(error["record"], int(error["begin"]))]
         info = x_data_info[sample_idx]
         sample_time = timedelta(seconds=(info.begin_time / info.sampling_rate))
         print(", ".join([error[field] for field in fields]), ", time:", sample_time)
@@ -206,9 +222,14 @@ def main():
 
     fields.append("time")
     for error in errors:
-        sample_idx = int(error["sample"]) - 1
+        # sample_idx = int(error["sample"]) - 1
+        sample_idx = sample_ids[(error["record"], int(error["begin"]))]
         x_features = x_data[sample_idx]
         info = x_data_info[sample_idx]
+        # FIXME: after exclusion of some samples, the error output of vf_test will have
+        # different sample index then that in the feature file. We need to fix this.
+        # otherwise, we have to use record_name and begin_time to find the correct sample
+        # instead of using index.
 
         # convert sample count to time
         sample_time = timedelta(seconds=(info.begin_time / info.sampling_rate))
@@ -236,7 +257,27 @@ def main():
         if args.plot:
             record = load_record(info.record_name)
             signals = record.signals[info.begin_time:info.end_time]
+            plt.ion()  # turn on interacitve mode for pyplot
             plot_sample(info, signals)
+            action = input("Actions (C: correct, Q: quit, others: show next):")
+            plt.close()  # close pyplot window
+
+            action = action.upper()
+            if action == "C":
+                correct_label = input("correct label:")
+                if correct_label:
+                    print("correct", info.record_name, info.begin_time)
+                    corrections[(info.record_name, info.begin_time)] = correct_label.upper()
+                    corrections_changed = True
+            elif action == "Q":
+                break
+
+    if args.update_labels and corrections_changed:  # if we're going to update incorrect labels
+        # save the updated label corrections back to file
+        with open(args.update_labels, "w") as f:
+            for key in sorted(corrections.keys(), key=lambda k: "{0}:{1}".format(k[0], k[1])):
+                correct_label = corrections[key]
+                f.write("{0}\t{1}\t{2}\n".format(key[0], key[1], correct_label))
 
 
 if __name__ == '__main__':

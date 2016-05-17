@@ -113,19 +113,15 @@ def correct_annotations(x_data_info, amendment_file):
     with open(amendment_file, "r") as f:
         for line in f:
             parts = line.strip().split()
-            if len(parts) < 3:
+            if len(parts) != 3:
                 continue
-            record_name = parts[0]
-            begin_time = parts[1]
-            replace = parts[2]
-            key = "{0}/{1}".format(record_name, begin_time)
-            correction[key] = replace
+            record_name, begin_time, correct_label = parts
+            correction[(record_name, int(begin_time))] = correct_label
     if correction:
         for i, info in enumerate(x_data_info):
-            key = "{0}/{1}".format(info.record_name, info.begin_time)
-            replace = correction.get(key, None)
+            replace = correction.get((info.record_name, info.begin_time), None)
             if replace:  # found an entry for the sample
-                print("Fix", key, replace)
+                print("Fix", info.record_name, info.begin_time, replace)
                 # fix the incorrect rhythm annotation for this sample
                 info.rhythm = replace
                 if replace == "(VF" or replace == "(VT":
