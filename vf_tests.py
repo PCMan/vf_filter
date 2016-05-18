@@ -120,7 +120,8 @@ def correct_annotations(x_data_info, amendment_file):
     if correction:
         for i, info in enumerate(x_data_info):
             replace = correction.get((info.record_name, info.begin_time), None)
-            if replace:  # found an entry for the sample
+            if replace and replace != "C":  # found an entry for the sample
+                # C means correct and confirmed so there is no need to fix it if the mark is "C".
                 print("Fix", info.record_name, info.begin_time, replace)
                 # fix the incorrect rhythm annotation for this sample
                 info.rhythm = replace

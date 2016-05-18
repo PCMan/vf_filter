@@ -277,6 +277,9 @@ def main():
                 corrections_changed = True
             elif action == "Q":
                 break
+            else:  # the current sample is correct and confirmed
+                corrections[(info.record_name, info.begin_time)] = "C"
+                corrections_changed = True
 
     if args.update_labels and corrections_changed:  # if we're going to update incorrect labels
         # save the updated label corrections back to file
