@@ -24,7 +24,7 @@ case $HOST in
     models="svc"
 	;;
 "arch-pc")
-    models="random_forest logistic_regression"
+    models="logistic_regression"
 	;;
 esac
 
