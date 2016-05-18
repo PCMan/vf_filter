@@ -631,6 +631,7 @@ mghdb/mgh041	979678	C
 mghdb/mgh041	988318	C
 mghdb/mgh041	996958	C
 mghdb/mgh046	333513	C
+mghdb/mgh046	336393	C
 mghdb/mgh046	339273	C
 mghdb/mgh046	342153	C
 mghdb/mgh046	345033	X
