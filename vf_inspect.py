@@ -222,14 +222,17 @@ def main():
 
     fields.append("time")
     for error in errors:
-        # sample_idx = int(error["sample"]) - 1
-        sample_idx = sample_ids[(error["record"], int(error["begin"]))]
-        x_features = x_data[sample_idx]
-        info = x_data_info[sample_idx]
         # FIXME: after exclusion of some samples, the error output of vf_test will have
         # different sample index then that in the feature file. We need to fix this.
         # otherwise, we have to use record_name and begin_time to find the correct sample
         # instead of using index.
+        sample_idx = sample_ids[(error["record"], int(error["begin"]))]
+        x_features = x_data[sample_idx]
+        info = x_data_info[sample_idx]
+
+        # skip the samples that we have already corrected previously
+        if args.update_labels and (info.record_name, info.begin_time) in corrections:
+            continue
 
         # convert sample count to time
         sample_time = timedelta(seconds=(info.begin_time / info.sampling_rate))
@@ -259,7 +262,7 @@ def main():
             signals = record.signals[info.begin_time:info.end_time]
             plt.ion()  # turn on interacitve mode for pyplot
             plot_sample(info, signals)
-            action = input("Actions (C: correct, Q: quit, others: show next):")
+            action = input("Actions (C: correct, X: exclude, Q: quit, others: show next):")
             plt.close()  # close pyplot window
 
             action = action.upper()
@@ -269,6 +272,9 @@ def main():
                     print("correct", info.record_name, info.begin_time)
                     corrections[(info.record_name, info.begin_time)] = correct_label.upper()
                     corrections_changed = True
+            elif action == "X":  # exclude the sample
+                corrections[(info.record_name, info.begin_time)] = "X"
+                corrections_changed = True
             elif action == "Q":
                 break
 
