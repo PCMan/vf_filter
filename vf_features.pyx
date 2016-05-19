@@ -463,18 +463,17 @@ cdef double lz_complexity(np.ndarray[double, ndim=1] samples):
     # make the samples a binary string S based on the threshold
     cdef bint b
     bin_str = bytearray([1 if b else 0 for b in (samples > threshold)])
-    s = bytearray([bin_str[0]])  # S=s1
-    q = bytearray([bin_str[1]])  # Q=s2
+    q = bytearray()
     cdef int i
-    for i in range(2, n_samples):
-        # SQ concatenation with the last char deleted => SQpi
-        sq = s + q[:-1]
-        if q in sq:  # Q is a substring of v(SQpi)
-            q.append(bin_str[i])
-        else:
-            cn += 1
-            s.extend(q)
-            q = bytearray([bin_str[i]])
+    cdef int s_end = 1
+    for i in range(1, n_samples):
+        q.append(bin_str[i])  # append current s[i] to Q
+        # SQpi: SQ concatenation with the last char deleted => S + Q[:-1]
+        sq_end = s_end + len(q) - 1  # end position of S + Q[:-1]
+        if bin_str.find(q, 0, sq_end) == -1:  # Q is NOT a substring of S + Q[:-1]
+            cn += 1  # increase complexity
+            s_end += len(q)  # append Q to S
+            q.clear()  # reset Q
 
     # normalization => C(n) = c(n)/b(n), b(n) = n/log2 n
     cdef double bn = n_samples / np.log2(n_samples)
