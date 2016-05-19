@@ -85,6 +85,7 @@ cudb/cu13	106814	X
 cudb/cu13	110814	X
 cudb/cu13	112814	X
 cudb/cu15	123498	C
+cudb/cu16	116351	C
 cudb/cu16	77706	X
 cudb/cu17	109034	C
 cudb/cu17	111034	C
@@ -136,6 +137,7 @@ cudb/cu24	103146	X
 cudb/cu25	107332	(N
 cudb/cu25	109332	X
 cudb/cu26	119316	X
+cudb/cu26	42382	C
 cudb/cu29	100545	X
 cudb/cu29	108545	C
 cudb/cu29	110545	X
@@ -759,6 +761,7 @@ mitdb/207	557620	C
 mitdb/207	569140	C
 mitdb/207	572020	C
 mitdb/207	577780	C
+mitdb/207	89320	C
 mitdb/223	208178	(B
 mitdb/223	211058	(B
 mitdb/223	213938	(B

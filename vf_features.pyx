@@ -12,6 +12,7 @@ import pickle
 
 
 feature_names = ("TCSC", "TCI", "STE", "MEA", "PSR", "HILB", "VF", "M", "A2", "FM", "LZ", "SpEn", "MAV")
+feature_names_set = set(feature_names)
 
 # time domain/morphology
 
@@ -515,8 +516,8 @@ cpdef np.ndarray[double, ndim=1] preprocessing(object src_samples, int sampling_
 
 
 # extract features from raw sample points of the original ECG signal
-cpdef extract_features(object src_samples, int sampling_rate):
-    features = array("d")
+cpdef extract_features(object src_samples, int sampling_rate, set features_to_extract=feature_names_set):
+    result = array("d")
     cdef np.ndarray[double, ndim=1] samples = preprocessing(src_samples, sampling_rate)
     cdef int n_samples = len(samples)
 
@@ -527,69 +528,103 @@ cpdef extract_features(object src_samples, int sampling_rate):
     # get all crossing points, use 20% of maximum as threshold
     # calculate average TCSC using a 3-s window
     # using 3-s moving window
-    tcsc = threshold_crossing_sample_counts(samples, sampling_rate=sampling_rate, window_duration=3.0, threshold_ratio=0.2)
-    features.append(tcsc)
+    cdef double tcsc = 0.0
+    if "TCSC" in features_to_extract:
+        tcsc = threshold_crossing_sample_counts(samples, sampling_rate=sampling_rate, window_duration=3.0, threshold_ratio=0.2)
+    result.append(tcsc)
 
     # average TCI for every 1-second segments
-    tci = threshold_crossing_intervals(samples, sampling_rate=sampling_rate, threshold_ratio=0.2)
-    features.append(tci)
+    cdef double tci = 0.0
+    if "TCI" in features_to_extract:
+        tci = threshold_crossing_intervals(samples, sampling_rate=sampling_rate, threshold_ratio=0.2)
+    result.append(tci)
 
     # Standard exponential (STE)
-    cdef double ste = standard_exponential(samples, sampling_rate)
-    features.append(ste)
+    cdef double ste = 0.0
+    if "STE" in features_to_extract:
+        ste = standard_exponential(samples, sampling_rate)
+    result.append(ste)
 
     # Modified exponential (MEA)
-    cdef double mea = modified_exponential(samples, sampling_rate)
-    features.append(mea)
+    cdef double mea = 0.0
+    if "MEA" in features_to_extract:
+        mea = modified_exponential(samples, sampling_rate)
+    result.append(mea)
 
     # phase space reconstruction (PSR)
-    cdef double psr = phase_space_reconstruction(samples, sampling_rate)
-    features.append(psr)  # phase space reconstruction (PSR)
+    cdef double psr = 0.0
+    if "PSR" in features_to_extract:
+         psr = phase_space_reconstruction(samples, sampling_rate)
+    result.append(psr)  # phase space reconstruction (PSR)
 
     # Hilbert transformation + PSR
-    cdef double hilb = hilbert_psr(samples, sampling_rate)
-    features.append(hilb)
+    cdef double hilb = 0.0
+    if "HILB" in features_to_extract:
+        hilb = hilbert_psr(samples, sampling_rate)
+    result.append(hilb)
 
-    # spectral parameters (characteristics of power spectrum)
-    # -------------------------------------------------
-    # perform discrete Fourier transform
-    # apply a hamming window here for side lobe suppression.
-    # (the original VF leak paper does not seem to do this).
-    # http://www.ni.com/white-paper/4844/en/
-    cdef np.ndarray[double complex, ndim=1] fft = np.fft.fft(samples * signal.hamming(n_samples))
-    cdef np.ndarray[double, ndim = 1] fft_freq = np.fft.fftfreq(n_samples)
-    # We only need the left half of the FFT result (with frequency > 0)
-    cdef  int n_fft = np.ceil(n_samples / 2)
-    fft = fft[0:n_fft]
-    fft_freq = fft_freq[0:n_fft]
+    cdef double vf = 0.0
+    cdef double spectral_moment = 0.0, a2 = 0.0
+    cdef double central_freq = 0.0
 
-    # calculate VF leaks
-    features.append(vf_leak(samples, fft, fft_freq))
+    cdef np.ndarray[double complex, ndim=1] fft
+    cdef np.ndarray[double, ndim = 1] fft_freq
+    cdef int n_fft
+    if features_to_extract & {"VF", "M", "A2"}:
+        # spectral parameters (characteristics of power spectrum)
+        # -------------------------------------------------
+        # perform discrete Fourier transform
+        # apply a hamming window here for side lobe suppression.
+        # (the original VF leak paper does not seem to do this).
+        # http://www.ni.com/white-paper/4844/en/
+        fft = np.fft.fft(samples * signal.hamming(n_samples))
+        fft_freq = np.fft.fftfreq(n_samples)
+        # We only need the left half of the FFT result (with frequency > 0)
+        n_fft = np.ceil(n_samples / 2)
+        fft = fft[0:n_fft]
+        fft_freq = fft_freq[0:n_fft]
 
-    # calculate other spectral parameters (M and A2)
-    cdef double spectral_moment, a2
-    (spectral_moment, a2) = spectral_features(fft, fft_freq, sampling_rate)
-    features.append(spectral_moment)
-    features.append(a2)
+        # calculate VF leaks
+        if "VF" in features_to_extract:
+            vf = vf_leak(samples, fft, fft_freq)
 
-    # central frequency (FM)
-    cdef double central_freq = central_frequency(fft, fft_freq, sampling_rate)
-    features.append(central_freq)
+        # calculate other spectral parameters (M and A2)
+        if features_to_extract & {"M", "A2"}:
+            (spectral_moment, a2) = spectral_features(fft, fft_freq, sampling_rate)
+            if "M" not in features_to_extract:
+                spectral_moment = 0.0
+            elif "A2" not in features_to_extract:
+                a2 = 0.0
+
+        # central frequency (FM)
+        if "FM" in features_to_extract:
+            central_freq = central_frequency(fft, fft_freq, sampling_rate)
+
+    result.append(vf)  # VF
+    result.append(spectral_moment)  # M
+    result.append(a2)  # A2
+    result.append(central_freq)  # FM
 
     # complexity parameters
     # -------------------------------------------------
-    cdef double lzc = lz_complexity(samples)
-    features.append(lzc)
+    cdef double lzc = 0.0
+    if "LZ" in features_to_extract:
+        lzc = lz_complexity(samples)
+    result.append(lzc)
 
     # sample entropy (SpEn)
-    cdef double spen = sample_entropy(samples)
-    features.append(spen)
+    cdef double spen = 0.0
+    if "SpEn" in features_to_extract:
+        spen = sample_entropy(samples)
+    result.append(spen)
 
     # MAV
-    cdef double mav = mean_absolute_value(samples, sampling_rate)
-    features.append(mav)
+    cdef double mav = 0.0
+    if "MAV" in features_to_extract:
+        mav = mean_absolute_value(samples, sampling_rate)
+    result.append(mav)
 
-    return features
+    return result
 
 
 # load features from data file
