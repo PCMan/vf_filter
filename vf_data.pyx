@@ -269,7 +269,22 @@ class Segment:
 # mghdb: only VF and VT
 class DataSet:
     def __init__(self):
-        pass
+        self.corrections = {}
+
+    # Some rhythm annotations in the original datasets are incorrect, so we provide a mechanism to override them.
+    def load_correction(self, str correction_file):
+        corrections = {}
+        try:
+            with open(correction_file, "r") as f:
+                for line in f:
+                    parts = line.strip().split()
+                    if len(parts) != 3:
+                        continue
+                    record_name, begin_time, correct_rhythm = parts
+                    corrections[(record_name, int(begin_time))] = correct_rhythm
+        except IOError:
+            print("Fail to open", correction_file)
+        self.corrections = corrections
 
     # generator for ECG sample segments
     def get_samples(self, double duration=5.0):
@@ -294,6 +309,7 @@ class DataSet:
                 channel = 0
                 annotator = "atr"
 
+            corrections = self.corrections
             for record_name in record_names:
                 record = Record()
                 record.load(db_name, record_name, channel=channel, annotator=annotator)
@@ -306,6 +322,14 @@ class DataSet:
                             segment_end = segment_begin + segment_size
                             signals = record.signals[segment_begin:segment_end]
                             segment_info = SegmentInfo(record, rhythm, segment_begin, segment_end)
+
+                            # check if we have corrections for this segment
+                            correction = corrections.get((segment_info.record_name, segment_begin), None)
+                            # "C" means correct and confirmed so there is no need to fix it if the mark is "C".
+                            if correction and correction != "C":  # found an entry for the sample
+                                print("Fix", segment_info.record_name, segment_begin, correction)
+                                # fix the incorrect rhythm annotation for this sample
+                                segment_info.rhythm = correction
                             segment = Segment(segment_info, signals)
                             yield segment
 

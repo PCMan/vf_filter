@@ -59,12 +59,15 @@ def main():
     parser.add_argument("-d", "--db-names", type=str, nargs="+", default=None)
     # parser.add_argument("-o", "--output", type=str)
     parser.add_argument("-s", "--segment-duration", type=int, default=8)
+    parser.add_argument("-c", "--correction-file", type=str, help="Override the incorrect labels of the original dataset.")
     args = parser.parse_args()
 
     n_segments = 0
     rhythm_statistics = {}
     case_statistics = {}
     dataset = vf_data.DataSet()
+    if args.correction_file:
+        dataset.load_correction(args.correction_file)
     for segment in dataset.get_samples(args.segment_duration):
         info = segment.info
         db_name = info.record_name.split("/", maxsplit=1)[0]

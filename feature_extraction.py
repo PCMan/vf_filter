@@ -34,10 +34,12 @@ def extract_features(idx, segment, resample_rate, update_features, verbose):
 
 
 # this is a generator function
-def load_all_segments(segment_duration):
+def load_all_segments(args):
     idx = 0
     dataset = vf_data.DataSet()
-    for segment in dataset.get_samples(segment_duration):
+    if args.correction_file:
+        dataset.load_correction(args.correction_file)
+    for segment in dataset.get_samples(args.segment_duration):
         yield idx, segment
         idx += 1
 
@@ -51,13 +53,14 @@ def main():
     parser.add_argument("-j", "--jobs", type=int, default=-1)
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("-u", "--update-features", type=str, nargs="+", choices=vf_features.feature_names, default=None)
+    parser.add_argument("-c", "--correction-file", type=str, help="Override the incorrect labels of the original dataset.")
     args = parser.parse_args()
 
     x_data_info = []
     x_data = []
     # perform segmentation + feature extraction
     parellel = Parallel(n_jobs=args.jobs, verbose=0, backend="multiprocessing", max_nbytes=2048)
-    results = parellel(delayed(extract_features)(idx, segment, args.resample_rate, args.update_features, args.verbose) for idx, segment in load_all_segments(args.segment_duration))
+    results = parellel(delayed(extract_features)(idx, segment, args.resample_rate, args.update_features, args.verbose) for idx, segment in load_all_segments(args))
     # sort the results from multiple jobs according to the order they are emitted
     results.sort(key=lambda result: result[0])
     for idx, features, segment_info in results:

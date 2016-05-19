@@ -108,30 +108,6 @@ def make_labels(x_data_info, label_method):
     return np.array(y_data)
 
 
-def correct_annotations(x_data_info, amendment_file):
-    correction = {}
-    with open(amendment_file, "r") as f:
-        for line in f:
-            parts = line.strip().split()
-            if len(parts) != 3:
-                continue
-            record_name, begin_time, correct_label = parts
-            correction[(record_name, int(begin_time))] = correct_label
-    if correction:
-        for i, info in enumerate(x_data_info):
-            replace = correction.get((info.record_name, info.begin_time), None)
-            if replace and replace != "C":  # found an entry for the sample
-                # C means correct and confirmed so there is no need to fix it if the mark is "C".
-                print("Fix", info.record_name, info.begin_time, replace)
-                # fix the incorrect rhythm annotation for this sample
-                info.rhythm = replace
-                if replace == "(VF" or replace == "(VT":
-                    # currently, we don't know the amplitude of the segment so we cannot determine if its coarse or
-                    # fine VF. So, let's exclude the sample for now. We don't know the rate of (VT either.
-                    # TODO: calculate amplitude and rate for all segments?
-                    info.rhythm = "X"
-
-
 def exclude_rhythms(x_data, x_data_info, excluded_rhythms):
     excluded_idx = np.array([i for i, info in enumerate(x_data_info) if info.rhythm in excluded_rhythms])
     x_data = np.delete(x_data, excluded_idx, axis=0)
@@ -235,7 +211,6 @@ def main():
     parser.add_argument("-f", "--features", type=int, nargs="+")  # feature selection
     parser.add_argument("-l", "--label-method", type=str, default="aha", help=label_methods_desc)
     parser.add_argument("-x", "--exclude-rhythms", type=str, nargs="+", default=["(ASYS"])  # exclude some rhythms from the test
-    parser.add_argument("-a", "--amendment-file", type=str, help="Override the incorrect labels of the original dataset.")
     args = parser.parse_args()
 
     # setup testing parameters
@@ -268,10 +243,6 @@ def main():
     # only select the specified feature
     if selected_features:
         x_data = x_data[:, selected_features]
-
-    # Override the incorrect annotations of the original dataset by an amendment file.
-    if args.amendment_file:
-        correct_annotations(x_data_info, args.amendment_file)
 
     # "X" is used internally by us (in amendment file) to mark some broken samples to exclude from the test
     excluded_rhythms = args.exclude_rhythms + ["X"] if args.exclude_rhythms else ["X"]
