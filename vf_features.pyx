@@ -11,7 +11,7 @@ from array import array  # python array with static types
 import pickle
 
 
-feature_names = ("TCSC", "TCI", "STE", "MEA", "PSR", "HILB", "VF", "M", "A2", "FM", "LZ", "SpEn", "MAV")
+feature_names = ("TCSC", "TCI", "STE", "MEA", "PSR", "HILB", "VF", "M", "A2", "FM", "LZ", "SpEn", "MAV", "C1", "C2", "C3")
 feature_names_set = set(feature_names)
 
 # time domain/morphology
@@ -480,6 +480,44 @@ cdef double complexity_measure(np.ndarray[double, ndim=1] samples):
     return lempel_ziv_complexity(bin_str)
 
 
+# Bandpass Filter and Auxiliary Counts (count1, 2, 3)
+cdef tuple auxiliary_counts(np.ndarray[double, ndim=1] samples, int sampling_rate):
+    # digital filter with central frequency at 14.6 Hz and bandwidth 
+    # from 13 to 16.5 Hz (–3dB) is applied onthe ECG data.
+    # With a sampling frequency of 250 Hz, the filter is designed by
+    # FS[i] = (14 FS[i-1] - 7 FS[i-2] + (S[i] - S[i-2])/2) / 8
+    # resample to 250 Hz as needed
+    cdef int count1 = 0, count2 = 0, count3 = 0
+    cdef int n_samples = len(samples)
+    if sampling_rate != 250:
+        samples = signal.resample(samples, int((n_samples / sampling_rate) * 250))
+        n_samples = len(samples)
+    
+    # low pass filter
+    cdef np.ndarray[double, ndim=1] fs = np.zeros(n_samples)
+    cdef int i
+    for i in range(2, n_samples):
+        fs[i] = (14 * fs[i - 1] - 7 * fs[i - 2] + (samples[i] - samples[i - 2]) / 2) / 8
+    
+    cdef double fs_max, fs_mean, fs_md
+    cdef np.ndarray[double, ndim=1] fs_segment
+    for i in range(0, n_samples, sampling_rate):
+        # these values are calculated for every 1-sec time interval
+        fs_segment = fs[i:i + sampling_rate]
+        fs_max = np.max(fs_segment)
+        fs_mean = np.mean(fs_segment)
+        fs_md = np.mean(np.abs(fs_segment - fs_mean))
+        # 1) Count1—Range: 0.5∗max(|FS|) to max(|FS|);
+        count1 += np.sum(fs_segment >= 0.5 * fs_max)
+
+        # 2) Count2—Range: mean(|FS|) to max(|FS|);
+        count2 += np.sum(fs_segment >= fs_mean)
+
+        # 3) Count3—Range: mean(|FS|) – MD to mean(|FS|) + MD,
+        count3 += np.sum(np.logical_and(fs_segment >= (fs_mean - fs_md), fs_segment <= (fs_mean + fs_md)))
+    return (count1, count2, count3)
+
+
 # Reference: https://homepages.fhv.at/ku/karl/VF/filtering.m
 cpdef np.ndarray[double, ndim=1] preprocessing(object src_samples, int sampling_rate, bint plotting=False):
     cdef np.ndarray[double, ndim=1] samples = np.array(src_samples, dtype="float64")  # convert the signals from int to double
@@ -623,6 +661,24 @@ cpdef extract_features(object src_samples, int sampling_rate, set features_to_ex
     if "MAV" in features_to_extract:
         mav = mean_absolute_value(samples, sampling_rate)
     result.append(mav)
+
+    # additional new features
+    # -------------------------------------------------
+
+    # Auxiliary counts (count1, 2, 3)
+    cdef int count1 = 0, count2 = 0, count3 = 0
+    if features_to_extract & {"C1", "C2", "C3"}:
+        (count1, count2, count3) = auxiliary_counts(samples, sampling_rate)
+        if "C1" not in features_to_extract:
+            count1 = 0
+        if "C2" not in features_to_extract:
+            count2 = 0
+        if "C3" not in features_to_extract:
+            count3 = 0
+    result.append(count1)
+    result.append(count2)
+    result.append(count3)
+
 
     return result
 

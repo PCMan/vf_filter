@@ -83,7 +83,7 @@ def main():
                     for i in preserve_idx:
                         new_x[i] = old_x[i]
         except Exception:
-            print("Unable to load", args.output, sys.exc_info)
+            print("Unable to load", args.output, sys.exc_info())
 
     # write to output files
     with open(args.output, "wb") as f:

@@ -7,7 +7,7 @@ from sklearn import cross_validation
 from sklearn import metrics
 from sklearn import grid_search
 import vf_data
-from vf_features import load_features
+from vf_features import load_features, feature_names
 from vf_eval import *
 import multiprocessing as mp
 import csv
@@ -208,7 +208,7 @@ def main():
     parser.add_argument("-c", "--cv-fold", type=int, default=5)  # 5 fold CV by default
     parser.add_argument("-p", "--test-percent", type=int, default=30)  # 30% test set size
     parser.add_argument("-b", "--balanced-weight", action="store_true")  # used balanced class weighting
-    parser.add_argument("-f", "--features", type=int, nargs="+")  # feature selection
+    parser.add_argument("-f", "--features", type=str, nargs="+", choices=feature_names, default=[])  # feature selection
     parser.add_argument("-l", "--label-method", type=str, default="aha", help=label_methods_desc)
     parser.add_argument("-x", "--exclude-rhythms", type=str, nargs="+", default=["(ASYS"])  # exclude some rhythms from the test
     args = parser.parse_args()
@@ -229,7 +229,7 @@ def main():
     if args.balanced_weight:
         class_weight = "balanced"
 
-    selected_features = args.features
+    selected_features = [feature_names.index(name) for name in args.features]
 
     # build scoring function
     if args.scorer == "ber":  # BER-based scoring function
