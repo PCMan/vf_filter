@@ -288,20 +288,6 @@ cdef double hilbert_psr(np.ndarray[double, ndim=1] samples, int sampling_rate):
     return np.sum(grid) / 1600
 
 
-# Bandpass filter:
-# http://scipy.github.io/old-wiki/pages/Cookbook/ButterworthBandpass
-"""
-cpdef np.ndarray[double, ndim=1] butter_bandpass_filter(np.ndarray[double, ndim=1] data, double lowcut, double highcut, double fs, int order=5):
-    cdef double nyq = 0.5 * fs
-    cdef double low = lowcut / nyq
-    cdef double high = highcut / nyq
-    cdef np.ndarray[double, ndim = 1] b, a
-    b, a = signal.butter(order, [low, high], btype='band')
-    cdef np.ndarray[double, ndim=1] y = signal.lfilter(b, a, data)
-    return y
-"""
-
-
 cpdef np.ndarray[double, ndim=1] drift_supression(np.ndarray[double, ndim=1] data, double cutoff_freq, double sampling_rate):
     # low pass filter for drift supression
     # Reference: https://homepages.fhv.at/ku/karl/VF/filtering.m
@@ -313,16 +299,25 @@ cpdef np.ndarray[double, ndim=1] drift_supression(np.ndarray[double, ndim=1] dat
     return signal.filtfilt(b, a, data)
 
 
+# Butterworth filter:
+# http://scipy.github.io/old-wiki/pages/Cookbook/ButterworthBandpass
 cpdef np.ndarray[double, ndim=1] butter_lowpass_filter(np.ndarray[double, ndim=1] data, double highcut_freq, double fs, int order=5):
     cdef double nyq = 0.5 * fs
     cdef double high = highcut_freq / nyq
     cdef np.ndarray[double, ndim = 1] b, a
     b, a = signal.butter(order, high, btype="lowpass")
-    cdef np.ndarray[double, ndim=1] y = signal.filtfilt(b, a, data)
+    cdef np.ndarray[double, ndim=1] y = signal.filtfilt(b, a, data)  # zero phase filter (no phase distortion)
     return y
 
 
 cpdef np.ndarray[double, ndim=1] moving_average(np.ndarray[double, ndim=1] samples, int order=5):
+    """
+    # Reference: https://homepages.fhv.at/ku/karl/VF/filtering.m
+    cdef np.ndarray[double, ndim = 1] b, a
+    b = np.ones(order) / order
+    a = np.ones(1)
+    return signal.lfilter(b, a, samples)
+    """
     # Reference: https://www.otexts.org/fpp/6/2
     # Moving average can be calculated using convolution
     # http://matlabtricks.com/post-11/moving-average-by-convolution
@@ -439,9 +434,28 @@ cdef double sample_entropy(np.ndarray[double, ndim=1] samples):
     return spen
 
 
+cdef double lempel_ziv_complexity(bytearray bin_str):
+    cdef int cn = 0
+    cdef int n = len(bin_str)
+    cdef bytearray q = bytearray()
+    cdef int i, s_end = 1
+    for i in range(1, n):
+        q.append(bin_str[i])  # append current s[i] to Q
+        # SQpi: SQ concatenation with the last char deleted => S + Q[:-1]
+        sq_end = s_end + len(q) - 1  # end position of S + Q[:-1]
+        if bin_str.find(q, 0, sq_end) == -1:  # Q is NOT a substring of S + Q[:-1]
+            cn += 1  # increase complexity
+            s_end += len(q)  # append Q to S
+            q.clear()  # reset Q
+
+    # normalization => C(n) = c(n)/b(n), b(n) = n/log2 n
+    cdef double bn = n / np.log2(n)
+    return cn / bn
+
+
 # Implement the algorithm described in the paper:
 # Xu-Sheng Zhang et al. 1999. Detecting Ventricular Tachycardia and Fibrillation by Complexity Measure
-cdef double lz_complexity(np.ndarray[double, ndim=1] samples):
+cdef double complexity_measure(np.ndarray[double, ndim=1] samples):
     cdef int cn = 0
 
     # find optimal threshold
@@ -463,23 +477,10 @@ cdef double lz_complexity(np.ndarray[double, ndim=1] samples):
     # make the samples a binary string S based on the threshold
     cdef bint b
     bin_str = bytearray([1 if b else 0 for b in (samples > threshold)])
-    q = bytearray()
-    cdef int i
-    cdef int s_end = 1
-    for i in range(1, n_samples):
-        q.append(bin_str[i])  # append current s[i] to Q
-        # SQpi: SQ concatenation with the last char deleted => S + Q[:-1]
-        sq_end = s_end + len(q) - 1  # end position of S + Q[:-1]
-        if bin_str.find(q, 0, sq_end) == -1:  # Q is NOT a substring of S + Q[:-1]
-            cn += 1  # increase complexity
-            s_end += len(q)  # append Q to S
-            q.clear()  # reset Q
-
-    # normalization => C(n) = c(n)/b(n), b(n) = n/log2 n
-    cdef double bn = n_samples / np.log2(n_samples)
-    return cn / bn
+    return lempel_ziv_complexity(bin_str)
 
 
+# Reference: https://homepages.fhv.at/ku/karl/VF/filtering.m
 cpdef np.ndarray[double, ndim=1] preprocessing(object src_samples, int sampling_rate, bint plotting=False):
     cdef np.ndarray[double, ndim=1] samples = np.array(src_samples, dtype="float64")  # convert the signals from int to double
     cdef int n_samples = len(samples)
@@ -608,7 +609,7 @@ cpdef extract_features(object src_samples, int sampling_rate, set features_to_ex
     # -------------------------------------------------
     cdef double lzc = 0.0
     if "LZ" in features_to_extract:
-        lzc = lz_complexity(samples)
+        lzc = complexity_measure(samples)
     result.append(lzc)
 
     # sample entropy (SpEn)
