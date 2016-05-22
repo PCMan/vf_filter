@@ -19,19 +19,21 @@ def read_info(str record_name):
 def read_signals(str record_name, int channel=0):
     _record_name = bytes(record_name, encoding="ascii")
     n_channels, sampling_rate = read_info(record_name)
-    gain = WFDB_DEFGAIN
+    cdef WFDB_Gain gain = WFDB_DEFGAIN
+    cdef int adc_zero = 0
     # read the signals
     cdef WFDB_Siginfo* sigInfo = <WFDB_Siginfo*>malloc(n_channels * sizeof(WFDB_Siginfo))
     cdef WFDB_Sample* sample_buf = <WFDB_Sample*>malloc(n_channels * sizeof(WFDB_Sample))
     signals = array("i")  # signed int
     if isigopen(_record_name, sigInfo, n_channels) == n_channels:
         gain = sigInfo[0].gain
+        adc_zero = sigInfo[0].adczero
         while getvec(sample_buf) > 0:
             sample = sample_buf[channel]  # we only want the specified channel
             signals.append(sample)
     # free(sigInfo)
     # free(sample_buf)
-    return n_channels, sampling_rate, gain, np.array(signals)
+    return n_channels, sampling_rate, gain, adc_zero, np.array(signals)
 
 
 def read_annotations(str record_name, str ann_name="atr"):

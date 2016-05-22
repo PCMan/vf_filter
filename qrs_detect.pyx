@@ -8,7 +8,6 @@ import pyximport; pyximport.install()  # use Cython
 import numpy as np
 import scipy as sp
 import scipy.signal
-import datetime
 import threading
 
 
@@ -24,7 +23,7 @@ cdef extern int amap(int a)
 _lock = threading.Lock()
 
 # This is not thread-safe due to the design flaw in osea20
-def qrs_detect(signals, int sampling_rate, double gain):
+def qrs_detect(signals, int sampling_rate, int adc_zero, int gain):
     beats = []
     # resample to 200Hz if needed
     if sampling_rate != 200:
@@ -37,17 +36,13 @@ def qrs_detect(signals, int sampling_rate, double gain):
     cdef int sample
     for sample_count, sample in enumerate(signals):  # send the samples to the beat detector one by one
         # Set baseline to 0 and resolution to 5 mV/lsb (200 units/mV)
-        # FIXME: remove ADC zero
-        # tmp = sample-ADCZero ;
-        sample = <int>(sample * 200 / gain)
+        sample = <int>((sample - adc_zero) * 200 / gain)
         beat_type = 0
         beat_match = 0
         delay = BeatDetectAndClassify(sample, &beat_type, &beat_match)
         if delay:
             beat_time = sample_count - delay
-            # time_str = str(datetime.timedelta(seconds=(beat_time / sampling_rate)))
             type_code = amap(beat_type)
-            # print(time_str, chr(type_code))
             beats.append((beat_time, chr(type_code)))
     _lock.release()
     return beats

@@ -131,13 +131,14 @@ class Record:
         self.name = ""
         self.sampling_rate = 0
         self.gain = 0
+        self.adc_zero = 0
 
     def load(self, str db_name, str record, int channel, str annotator):
         record_name = "{0}/{1}".format(db_name, record)
         self.name = record_name
 
         cdef list annotations
-        (n_channels, self.sampling_rate, self.gain, self.signals) = wfdb_reader.read_signals(record_name, channel=channel)
+        (n_channels, self.sampling_rate, self.gain, self.adc_zero, self.signals) = wfdb_reader.read_signals(record_name, channel=channel)
         # print(record_name)
 
         # read annotations
@@ -230,6 +231,7 @@ class SegmentInfo:
         self.record_name = record.name
         self.sampling_rate = record.sampling_rate
         self.gain = record.gain  # use to convert signal values to mV
+        self.adc_zero = record.adc_zero
         self.begin_time = begin_time  # in terms of sample number (reletive to the head of the segment)
         self.end_time = end_time
         self.n_beats = 0  # number of beats, if available in the annotation

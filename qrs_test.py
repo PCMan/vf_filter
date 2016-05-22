@@ -5,6 +5,7 @@ import vf_data
 import matplotlib.pyplot as plt
 import scipy as sp
 import scipy.signal
+import datetime
 
 
 def main(args):
@@ -15,8 +16,10 @@ def main(args):
     signals = record.signals[begin_sig:begin_sig + n_sig]
     # resmaple to 200
     signals = sp.signal.resample(signals, (len(signals) / record.sampling_rate) * 200)
-    beats = qrs_detect.qrs_detect(signals, 200, record.gain)
-    print(beats)
+    beats = qrs_detect.qrs_detect(signals, 200, record.adc_zero, record.gain)
+    for beat_sample, beat_type in beats:
+        time_str = str(datetime.timedelta(seconds=(beat_sample / 200)))
+        print(time_str, beat_sample, beat_type)
     plt.plot(signals)
     plt.vlines([b[0] for b in beats], 0, max(signals))
     plt.show()
