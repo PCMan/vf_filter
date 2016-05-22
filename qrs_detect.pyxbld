@@ -1,0 +1,18 @@
+# Reference: http://stackoverflow.com/questions/26833947/how-can-i-set-cython-compiler-flags-when-using-pyximport
+def make_ext(modname, pyxfilename):
+    from distutils.extension import Extension
+    return Extension(name=modname,
+                     extra_compile_args=["-Wimplicit-function-declaration"],
+                     sources=[pyxfilename,
+                     "osea20-gcc/analbeat.c",
+                     "osea20-gcc/bdac.c",
+                     "osea20-gcc/bxbep.c",
+                     "osea20-gcc/classify.c",
+                     "osea20-gcc/match.c",
+                     "osea20-gcc/noisechk.c",
+                     "osea20-gcc/postclas.c",
+                     "osea20-gcc/qrsdet.c",
+                     "osea20-gcc/qrsfilt.c",
+                     "osea20-gcc/rythmchk.c"
+                     ],
+                     libraries=["wfdb", "m"])
