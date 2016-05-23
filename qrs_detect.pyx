@@ -34,6 +34,20 @@ def qrs_detect(signals, int sampling_rate, int adc_zero, int gain):
     cdef int beat_type = 0, beat_match = 0
     cdef double tmp
     cdef int sample
+    # The QRS detector need to wait for 8 QRS beats to initialize the thresholds.
+    # Let's feed the  samples to initialize it and let it reach a steady state.
+    cdef int n_beats = 0
+    for sample in signals:
+        sample = <int>((sample - adc_zero) * 200 / gain)
+        beat_type = 0
+        beat_match = 0
+        if BeatDetectAndClassify(sample, &beat_type, &beat_match):
+            n_beats += 1
+            if n_beats >= 8:
+                break
+
+    # now the beat detector already read len(signals) samples and is possibly in a steady state.
+    # Let's feed the same samples to it again to do the real detection.
     for sample_count, sample in enumerate(signals):  # send the samples to the beat detector one by one
         # Set baseline to 0 and resolution to 5 mV/lsb (200 units/mV)
         sample = <int>((sample - adc_zero) * 200 / gain)
@@ -42,6 +56,8 @@ def qrs_detect(signals, int sampling_rate, int adc_zero, int gain):
         delay = BeatDetectAndClassify(sample, &beat_type, &beat_match)
         if delay:
             beat_time = sample_count - delay
+            if beat_time < 0:
+                continue
             type_code = amap(beat_type)
             beats.append((beat_time, chr(type_code)))
     _lock.release()
