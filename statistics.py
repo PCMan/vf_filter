@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import pyximport; pyximport.install()
 import vf_data
+import vf_features
 import argparse
 
 COARSE_VF_THRESHOLD = 0.2
@@ -76,8 +77,9 @@ def main():
         rhythm_name = info.rhythm
         # print(info.record_name, info.begin_time, info.rhythm_types)
         # distinguish subtypes of VT and VF
+        amplitude = vf_features.get_amplitude(segment.signals, info.sampling_rate)
         if rhythm_name == "(VF":
-            if info.amplitude > COARSE_VF_THRESHOLD:  # coarse VF
+            if amplitude > COARSE_VF_THRESHOLD:  # coarse VF
                 rhythm_name = "(VF.c"
             else:
                 rhythm_name = "(VF.f"

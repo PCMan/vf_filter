@@ -42,13 +42,10 @@ def main():
 
     # resmaple to 200
     signals = sp.signal.resample(signals, (len(signals) / record.sampling_rate) * 200)
-    beats = qrs_detect.qrs_detect(signals, 200, record.adc_zero, record.gain)
+    beats = qrs_detect.qrs_detect(signals, sampling_rate=200)
     for beat_sample, beat_type in beats:
         time_str = str(datetime.timedelta(seconds=(beat_sample / 200)))
         print(time_str, beat_sample, beat_type)
-
-    # convert to mV
-    signals = (signals.astype("float64") - record.adc_zero) / record.gain
 
     hr = (len(beats) / args.duration) * 60
     print("estimated HR:", hr, "BPM")

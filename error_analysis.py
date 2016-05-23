@@ -47,7 +47,6 @@ def load_record(record_name):
 
 def plot_sample(info, signals):
     n_samples = len(signals)
-    signals = signals.astype("float64") / info.gain  # convert from digital value to analogue amplitude (mV)
 
     figure, axes = plt.subplots(4, 2)  # sharex=True
     ax = axes[0, 0]

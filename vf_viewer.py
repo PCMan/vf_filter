@@ -3,8 +3,6 @@ import pyximport; pyximport.install()
 import vf_features
 import vf_data
 import argparse
-import scipy as sp
-import scipy.signal
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -33,9 +31,6 @@ def main():
 
     record.load(db_name, record_name, channel=channel, annotator=annotator)
     samples = record.signals[args.begin:(args.begin + args.duration * int(record.sampling_rate))]
-
-    # convert to mV
-    samples = (samples.astype("float64") - record.adc_zero) / record.gain
 
     # trend removal (drift suppression)
     samples = vf_features.drift_supression(samples, 1, record.sampling_rate)

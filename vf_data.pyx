@@ -138,8 +138,11 @@ class Record:
         self.name = record_name
 
         cdef list annotations
-        (n_channels, self.sampling_rate, self.gain, self.adc_zero, self.signals) = wfdb_reader.read_signals(record_name, channel=channel)
+        (n_channels, self.sampling_rate, self.gain, self.adc_zero, signals) = wfdb_reader.read_signals(record_name, channel=channel)
         # print(record_name)
+
+        # substract ADC zero and convert the unit to mV
+        self.signals = (signals - self.adc_zero).astype("float64") / self.gain
 
         # read annotations
         annotations = []
@@ -225,13 +228,12 @@ class Record:
             current_rhythm.end_time = len(self.signals)
         return rhythms
 
+
 # info of a sample segment
 class SegmentInfo:
     def __init__(self, record, rhythm, int begin_time, int end_time) -> object:
         self.record_name = record.name
         self.sampling_rate = record.sampling_rate
-        self.gain = record.gain  # use to convert signal values to mV
-        self.adc_zero = record.adc_zero
         self.begin_time = begin_time  # in terms of sample number (reletive to the head of the segment)
         self.end_time = end_time
         self.n_beats = 0  # number of beats, if available in the annotation
@@ -251,13 +253,10 @@ class SegmentInfo:
         cdef double heart_rate = (n_beats / duration) * 60 if duration else 0.0  # heart rate (beats per minute)
         return heart_rate
 
+
 # sample segment
 class Segment:
     def __init__(self, info, signals) -> object:
-        # Calculate amplitude for VF segments so later we can use it to distinguish coarse VF from fine VF
-        if info.rhythm == "(VF":
-            # FIXME: max - min only gives a rough estimate of peak-to-peak amplitude here :-(
-            info.amplitude = (np.max(signals) - np.min(signals)) / info.gain
         self.info = info
         self.signals = signals
 
@@ -329,7 +328,7 @@ class DataSet:
                             correction = corrections.get((segment_info.record_name, segment_begin), None)
                             # "C" means correct and confirmed so there is no need to fix it if the mark is "C".
                             if correction and correction != "C":  # found an entry for the sample
-                                print("Fix", segment_info.record_name, segment_begin, correction)
+                                # print("Fix", segment_info.record_name, segment_begin, correction)
                                 # fix the incorrect rhythm annotation for this sample
                                 segment_info.rhythm = correction
                             segment = Segment(segment_info, signals)

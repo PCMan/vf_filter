@@ -32,8 +32,7 @@ def main():
     for segment in dataset.get_samples(8):
         info = segment.info
         rhythm = info.rhythm
-        # convert to mV
-        samples = (segment.signals.astype("float64") - info.adc_zero) / info.gain
+        samples = segment.signals
         # trend removal (drift suppression)
         samples = vf_features.drift_supression(samples, 1, info.sampling_rate)
         # smoothing

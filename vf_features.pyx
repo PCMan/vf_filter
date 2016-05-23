@@ -9,9 +9,10 @@ import pyeeg  # calculate sample entropy
 import matplotlib.pyplot as plt
 from array import array  # python array with static types
 import pickle
+from qrs_detect import qrs_detect
 
 
-feature_names = ("TCSC", "TCI", "STE", "MEA", "PSR", "HILB", "VF", "M", "A2", "FM", "LZ", "SpEn", "MAV", "C1", "C2", "C3")
+feature_names = ("TCSC", "TCI", "STE", "MEA", "PSR", "HILB", "VF", "M", "A2", "FM", "LZ", "SpEn", "MAV", "C1", "C2", "C3", "AMP")
 feature_names_set = set(feature_names)
 
 # time domain/morphology
@@ -518,40 +519,6 @@ cdef tuple auxiliary_counts(np.ndarray[double, ndim=1] samples, int sampling_rat
     return (count1, count2, count3)
 
 
-# Reference: https://homepages.fhv.at/ku/karl/VF/filtering.m
-cpdef np.ndarray[double, ndim=1] preprocessing(object src_samples, int sampling_rate, bint plotting=False):
-    cdef np.ndarray[double, ndim=1] samples = np.array(src_samples, dtype="float64")  # convert the signals from int to double
-    cdef int n_samples = len(samples)
-
-    if plotting:
-        f, ax = plt.subplots(3, sharex=True)
-        ax[0].set_title("before preprocessing")
-        ax[0].plot(samples)
-    # normalize the input ECG sequence
-    samples = (samples - np.min(samples)) / (np.max(samples) - np.min(samples))
-
-    # perform mean subtraction
-    samples = samples - np.mean(samples)
-
-    # 5-order moving average
-    samples = moving_average(samples, order=5)
-    if plotting:
-        ax[1].set_title("moving average")
-        ax[1].plot(samples)
-
-    # low pass filter for drift supression
-    samples = drift_supression(samples, 1, sampling_rate)
-
-    # band pass filter
-    samples = butter_lowpass_filter(samples, 30, sampling_rate)
-    if plotting:
-        ax[2].set_title("band pass filter")
-        ax[2].plot(samples)
-        ax[2].plot([0, len(samples)], [0.2, 0.2], 'r')  # draw a horizontal line at 0.2
-        plt.plot(samples)
-        plt.show()
-    return samples
-
 
 # Find the max peak-to-peak amplitude in the samples
 # The amplitudes of samples should be converted to "mV" prior to calling this function.
@@ -594,12 +561,38 @@ cpdef double get_amplitude(np.ndarray[double, ndim=1] samples, int sampling_rate
 
 
 # extract features from raw sample points of the original ECG signal
-cpdef extract_features(object src_samples, int sampling_rate, set features_to_extract=feature_names_set):
+# Before calling this function, the samples should have ADC zero substracted and converted to mV.
+cpdef extract_features(np.ndarray[double, ndim=1] samples, int sampling_rate, set features_to_extract=feature_names_set):
     result = array("d")
-    cdef np.ndarray[double, ndim=1] samples = preprocessing(src_samples, sampling_rate)
+
+    # Pre-processing:
+    # Reference: https://homepages.fhv.at/ku/karl/VF/filtering.m
+
+    # perform mean subtraction
+    samples = samples - np.mean(samples)
+
+    # 5-order moving average
+    samples = moving_average(samples, order=5)
+
+    # low pass filter for drift supression
+    samples = drift_supression(samples, 1, sampling_rate)
+
+    # band pass filter
+    samples = butter_lowpass_filter(samples, 30, sampling_rate)
+
     cdef int n_samples = len(samples)
 
-    # Time domain/morphology
+    # calculate the raw amplitude of the signals
+    cdef double amplitude = get_amplitude(samples, sampling_rate)
+
+    # perform QRS beat detection as part of the feature extraction process
+    cdef list beats = qrs_detect(samples, sampling_rate)
+
+    # We move the normalization step to the end of pre-processing since we need amplitudes of the original signals.
+    # normalize the input ECG sequence
+    samples = (samples - np.min(samples)) / (np.max(samples) - np.min(samples))
+
+    # Time domain/morphology features
     # -------------------------------------------------
     # Threshold crossing interval (TCI) and Threshold crossing sample count (TCSC)
 
@@ -719,8 +712,10 @@ cpdef extract_features(object src_samples, int sampling_rate, set features_to_ex
     result.append(count2)
     result.append(count3)
 
+    # amplitude of the raw signals
+    result.append(amplitude)
 
-    return result
+    return result, beats
 
 
 # load features from data file
