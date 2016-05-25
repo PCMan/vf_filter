@@ -6,6 +6,7 @@ from sklearn import ensemble
 from sklearn import cross_validation
 from sklearn import metrics
 from sklearn import grid_search
+from sklearn.base import BaseEstimator
 import vf_data
 from vf_features import load_features, feature_names
 from vf_eval import *
@@ -14,13 +15,18 @@ import csv
 import argparse
 from array import array
 
+# initial classification to detect possibly shockable rhythm
+SAFE_RHYTHM = 0  # others
+DANGEROUS_RHYTHM = 1  # VF or VT
+binary_class_names = ["safe", "dangerous"]
 
+# AHA clasases
 NON_SHOCKABLE = 0
 SHOCKABLE = 1
 INTERMEDIATE = 2
 aha_classes = (NON_SHOCKABLE, SHOCKABLE, INTERMEDIATE)
 aha_classe_names = ["non-shockable", "shockable", "intermediate"]
-shockable_rhythms = ("(VF", "(VT", "(VFL", "(VF,coarse", "(VF,fine", "(VT,rapid", "(VT,slow")
+shockable_rhythms = ("(VF", "(VT", "(VFL")
 
 # Use threshold value: 180 BPM to define rapid VT
 # Reference: Nishiyama et al. 2015. Diagnosis of Automated External Defibrillators (JAHA)
@@ -29,24 +35,11 @@ RAPID_VT_RATE = 180
 # 0.2 mV is suggested by AHA
 COARSE_VF_THRESHOLD = 0.2
 
-# label the segment according to different problem definition
-label_methods_desc = """
-label methods:
-aha: multi-class based on AHA guideline for AED:
-    shockable (coarse VF + rapid VT): 1
-    intermediate (fine VF + slow VT) :2
-    non-shockable (others): 0
-0: binary => VF: 1, others: 0
-1: binary => VF or VFL: 1, others: 0
-2: binary => VF or VFL or VT: 1, others: 0
-3: multi-class:
-    VF: 1
-    VFL/VT: 2
-    others: 0
-"""
-
-def make_aha_classes(x_data_info):
-    for info in x_data_info:
+def create_aha_labels(x_data, x_data_info):
+    y_data = np.zeros(len(x_data_info), dtype="int")
+    for i in range(len(x_data)):
+        x = x_data[i]
+        info = x_data_info[i]
         rhythm = info.rhythm
         # distinguish subtypes of VT and VF
         # References for the definition of "coarse":
@@ -59,53 +52,26 @@ def make_aha_classes(x_data_info):
         # 3. In AHA recommendations for AED, a peak-to-peak amplitude of 0.2 mV is suggested.
         if rhythm == "(VF":
             if info.amplitude > COARSE_VF_THRESHOLD:  # coarse VF
-                info.rhythm += ",coarse"
+                y_data[i] = SHOCKABLE
             else:  # fine VF
-                info.rhythm += ",fine"
+                y_data[i] = INTERMEDIATE
         elif rhythm == "(VT":
             hr = info.get_heart_rate()
             if hr >= RAPID_VT_RATE:
-                info.rhythm += ",rapid"
+                y_data[i] = SHOCKABLE
             elif hr > 0:
-                info.rhythm += ",slow"
+                y_data[i] = INTERMEDIATE
         elif rhythm == "(VFL":  # VFL is VF with HR > 240 BPM, so it's kind of rapid VT
-            info.rhythm = "(VT,rapid"
+                y_data[i] = SHOCKABLE
+    return y_data
 
 
-def make_labels(x_data_info, label_method):
-    y_data = array('I')
-    for info in x_data_info:
-        rhythm = info.rhythm
-        label = 0
-        if label_method == "aha":
-            # distinguish subtypes of VT and VF
-            if rhythm == "(VF,coarse":
-                label = SHOCKABLE
-            elif rhythm == "(VF,fine":  # fine VF
-                label = INTERMEDIATE
-            elif rhythm == "(VT,rapid":
-                label = SHOCKABLE
-            elif rhythm == "(VT,slow":
-                label = INTERMEDIATE
-            else:
-                label = NON_SHOCKABLE
-        elif label_method == "0":
-            label = 1 if rhythm == "(VF" else 0
-        elif label_method == "1":
-            label = 1 if rhythm in ("(VF", "(VFL") else 0
-        elif label_method == "2":
-            label = 1 if rhythm in ("(VF", "(VFL", "(VT") else 0
-        elif label_method == "3":  # multi-class: VF, VFL/VT, others
-            if rhythm == "(VF":
-                label = 1
-            elif rhythm in ("(VT", "(VFL"):  # We define VFL as rapid VT here.
-                # VT at 240-300 beats/min is often termed ventricular flutter.
-                # http://emedicine.medscape.com/article/159075-overview
-                label = 2
-            else:  # others
-                label = 0
-        y_data.append(label)
-    return np.array(y_data)
+def create_binary_labels(x_data_info):
+    y_data = np.zeros(len(x_data_info), dtype="int")
+    for i, info in enumerate(x_data_info):
+        if info.rhythm in shockable_rhythms:
+            y_data[i] = DANGEROUS_RHYTHM 
+    return y_data
 
 
 def exclude_rhythms(x_data, x_data_info, excluded_rhythms):
@@ -193,6 +159,49 @@ def create_estimator(estimator_name, class_weight):
     return estimator, param_grid, support_class_weight
 
 
+def create_csv_fields(label_encoder):
+    csv_fields = ["iter"]
+    for class_name in binary_class_names:
+        csv_fields.extend(["{0}[{1}]".format(field, class_name) for field in ("Se", "Sp", "precision")])
+    for class_name in aha_classe_names:
+        csv_fields.extend(["{0}[{1}]".format(field, class_name) for field in ("Se", "Sp", "precision")])
+    for class_name in label_encoder.classes_:
+        if class_name in shockable_rhythms:  # shockable rhythms
+            csv_fields.append("Se[{0}]".format(class_name))
+        else:  # other non-shockable rhythms
+            csv_fields.append("Sp[{0}]".format(class_name))
+    return csv_fields
+
+# final clasification based on AHA requirements
+def aha_classifier(x_test, x_test_info, binary_y_predict):
+    aha_y_predict = np.zeros(len(x_test), dtype="int")
+    for i in range(len(x_test)):
+        # Check if this rhythm is one of VF, VT, or VFL (dangerous rhythms)
+        if binary_y_predict[i] == DANGEROUS_RHYTHM:
+            info = x_test_info[i]
+            # This rhythm can be VF, VFL, or VT, but we don't know
+            # TODO: we may use some simple features to distinguish them if needed
+            amplitude = info.amplitude
+            # perform QRS detection to calculate heart rate
+            # here we get the stored QRS detection result done previously for speed up.
+            beats = info.detected_beats
+            if beats:  # heart beats are detected
+                hr = (len(beats) / info.get_duration()) * 60  # average HR (BPM)
+                if hr >= RAPID_VT_RATE:  # this is either rapid VT or VF (both are shockable, no need to distinguish them)
+                    y = SHOCKABLE
+                else:  # this rhythm is slower than 180 BPM
+                    # This can be VF (shockable) or slow VT (intermediate)
+                    # TODO: find a method to distinguish them
+                    y = INTERMEDIATE
+            else:  # no QRS complex was found, this must be VF
+                if amplitude >= COARSE_VF_THRESHOLD:
+                    y = SHOCKABLE
+                else:
+                    y = INTERMEDIATE
+            aha_y_predict[i] = y
+    return aha_y_predict
+
+
 def main():
     # parse command line arguments
     parser = argparse.ArgumentParser()
@@ -209,7 +218,7 @@ def main():
     parser.add_argument("-p", "--test-percent", type=int, default=30)  # 30% test set size
     parser.add_argument("-b", "--balanced-weight", action="store_true")  # used balanced class weighting
     parser.add_argument("-f", "--features", type=str, nargs="+", choices=feature_names, default=[])  # feature selection
-    parser.add_argument("-l", "--label-method", type=str, default="aha", help=label_methods_desc)
+    parser.add_argument("-l", "--label-method", type=str, default="aha")
     parser.add_argument("-x", "--exclude-rhythms", type=str, nargs="+", default=["(ASYS"])  # exclude some rhythms from the test
     args = parser.parse_args()
 
@@ -224,12 +233,13 @@ def main():
     test_size = args.test_percent / 100
     if test_size > 1:
         test_size = 0.3
+    estimator_name = args.model
 
     class_weight = None
     if args.balanced_weight:
         class_weight = "balanced"
 
-    selected_features = [feature_names.index(name) for name in args.features]
+    selected_features = [feature_names.index(name) for name in args.features]  # convert feature names to indices
 
     # build scoring function
     if args.scorer == "ber":  # BER-based scoring function
@@ -244,38 +254,29 @@ def main():
     if selected_features:
         x_data = x_data[:, selected_features]
 
-    # "X" is used internally by us (in amendment file) to mark some broken samples to exclude from the test
-    excluded_rhythms = args.exclude_rhythms + ["X"] if args.exclude_rhythms else ["X"]
+    # "X" is used internally by us (in label correction file) to mark some broken samples to exclude from the test
+    excluded_rhythms = ["X"]
+    if args.exclude_rhythms:
+        excluded_rhythms.extend(args.exclude_rhythms)
     # exclude samples with some rhythms from the test
     x_data, x_data_info = exclude_rhythms(x_data, x_data_info, excluded_rhythms)
-
-    if args.label_method == "aha":  # distinguish subtypes of VT and VF
-        make_aha_classes(x_data_info)
 
     # encode differnt types of rhythm names into numeric codes for stratified sampling later
     y_rhythm_names = [info.rhythm for info in x_data_info]
     label_encoder = preprocessing.LabelEncoder()
-    y_rhythm_types = label_encoder.fit_transform(y_rhythm_names)
+    x_rhythm_types = label_encoder.fit_transform(y_rhythm_names)
 
     # label the samples
-    y_data = make_labels(x_data_info, args.label_method)
+    binary_y_data = create_binary_labels(x_data_info)
+    aha_y_data = create_aha_labels(x_data, x_data_info)
+
+    # try to classify the samples using a beat detector and simple heuristics
+    # y_basic_predict = basic_classify(x_data, x_data_info)
 
     # build estimator to test
-    estimator_name = args.model
     estimator, param_grid, support_class_weight = create_estimator(estimator_name, class_weight)
 
-    # generate field names for the output csv file
-    if args.label_method == "aha":
-        csv_fields = ["iter"]
-        for class_name in aha_classe_names:
-            csv_fields.extend(["{0}[{1}]".format(field, class_name) for field in ("Se", "Sp", "precision")])
-        for class_name in label_encoder.classes_:
-            if class_name in shockable_rhythms:  # shockable rhythms
-                csv_fields.append("Se[{0}]".format(class_name))
-            else:  # other non-shockable rhythms
-                csv_fields.append("Sp[{0}]".format(class_name))
-    else:
-        csv_fields = ["iter", "Se", "Sp", "PPV", "Acc", "Se(Sp95)", "Se(Sp97)", "Se(Sp99)", "TP", "TN", "FP", "FN"]
+    csv_fields = create_csv_fields(label_encoder)  # generate field names for the output csv file
 
     # prepare a matrix to store the error states of each sample during test iterations
     predict_results = None
@@ -293,13 +294,16 @@ def main():
         for it in range(1, n_test_iters + 1):
             print(estimator_name, it)
             row = {"iter" : it}
+            # generate test for this iteration
             # Here we split the indicies of the rows rather than the data array itself.
             x_indicies = list(range(len(x_data)))
             x_train_idx, x_test_idx, y_train, y_test = cross_validation.train_test_split(x_indicies,
-                                                                                         y_data,
-                                                                                         test_size=test_size,
-                                                                                         stratify=y_data)
+                                                                                                                                         binary_y_data,
+                                                                                                                                         test_size=test_size,
+                                                                                                                                         stratify=aha_y_data)  # stratify=x_rhythm_types does not work due to low number of some classes. :-(
+            # training dataset
             x_train = x_data[x_train_idx]
+            # testing dataset
             x_test = x_data[x_test_idx]
             x_test_info = x_data_info[x_test_idx]
 
@@ -324,74 +328,53 @@ def main():
                                             n_jobs=n_jobs,
                                             cv=n_cv_folds,
                                             verbose=0)
-
-            # perform the classification training
-            grid.fit(x_train, y_train)
-
-            # predict using the trained estimator
+            grid.fit(x_train, y_train)  # perform the classification training
             y_predict = grid.predict(x_test)
-            if estimator_name.startswith("mlp"):  # sknn has different format of output and it needs to be flatten into a 1d array.
-                y_predict = y_predict.flatten()
 
             if args.error_log:  # calculate error statistics for each sample
                 included_idx = np.array(x_test_idx)  # samples included in this test iteration
                 predict_results[included_idx, it - 1] = y_predict  # remember prediction results of all included samples
 
             # output the result of classification to csv file
-            if args.label_method == "aha" or args.label_method == "3":  # multi-class clasification
-                results = MultiClassificationResult(y_test, y_predict, classes=aha_classes).results
-                for class_name, result in zip(aha_classe_names, results):
-                    row["Se[{0}]".format(class_name)] = result.sensitivity
-                    row["Sp[{0}]".format(class_name)] = result.specificity
-                    row["precision[{0}]".format(class_name)] = result.precision
+            results = MultiClassificationResult(y_test, y_predict, classes=range(len(binary_class_names))).results
+            for class_name, result in zip(binary_class_names, results):
+                row["Se[{0}]".format(class_name)] = result.sensitivity
+                row["Sp[{0}]".format(class_name)] = result.specificity
+                row["precision[{0}]".format(class_name)] = result.precision
 
-                # report performance for each rhythm type (suggested by AHA guideline for AED development)
-                for rhythm_id, rhythm_name in enumerate(label_encoder.classes_):
-                    y_test_rhythm_types = y_rhythm_types[x_test_idx]
-                    idx = (y_test_rhythm_types == rhythm_id)
-                    rhythm_y_test = y_test[idx]
-                    rhythm_y_predict = y_predict[idx]
-                    # convert to binary classification for each type of arrythmia
-                    bin_y_test = np.zeros((len(rhythm_y_test), 1))
-                    bin_y_predict = np.zeros((len(rhythm_y_predict), 1))
-                    if rhythm_name in shockable_rhythms:  # for shockable rhythms, report sensitivity (TPR)
-                        if rhythm_name == "(VF,coarse" or rhythm_name == "(VT,rapid":
-                            target = SHOCKABLE
-                        else:
-                            target = INTERMEDIATE
-                        bin_y_test[rhythm_y_test == target] = 1
-                        bin_y_predict[rhythm_y_predict == target] = 1
-                        result = BinaryClassificationResult(bin_y_test, bin_y_predict)
-                        row["Se[{0}]".format(rhythm_name)] = result.sensitivity
-                    else:  # for non-shockable rhythms, report specificity (TNR)
-                        bin_y_test[rhythm_y_test == NON_SHOCKABLE] = 1
-                        bin_y_predict[rhythm_y_predict == NON_SHOCKABLE] = 1
-                        result = BinaryClassificationResult(bin_y_test, bin_y_predict)
-                        row["Sp[{0}]".format(rhythm_name)] = result.sensitivity
-            else:  # simple binary classification
-                result = BinaryClassificationResult(y_test, y_predict)
-                row["Se"] = result.sensitivity
-                row["Sp"] = result.specificity
-                row["PPV"] = result.precision
-                row["Acc"] = result.accuracy
-                row["TP"] = result.tp
-                row["TN"] = result.tn
-                row["FP"] = result.fp
-                row["FN"] = result.fn
+            # perform final classification based on AHA classification scheme
+            y_test = aha_y_data[x_test_idx]  # the actual AHA class
+            y_predict = aha_classifier(x_test, x_test_info, y_predict)  # the predicted AHA class
+            # report the performance of final AHA classification
+            results = MultiClassificationResult(y_test, y_predict, classes=aha_classes).results
+            for class_name, result in zip(aha_classe_names, results):
+                row["Se[{0}]".format(class_name)] = result.sensitivity
+                row["Sp[{0}]".format(class_name)] = result.specificity
+                row["precision[{0}]".format(class_name)] = result.precision
 
-                # prediction with probabilities
-                if hasattr(estimator, "predict_proba"):
-                    y_predict_scores = grid.predict_proba(x_test)[:, 1]
-                    false_pos_rate, true_pos_rate, thresholds = metrics.roc_curve(y_test, y_predict_scores, pos_label=1)
-                    # find sensitivity at 95% specificity
-                    x = np.searchsorted(false_pos_rate, 0.05)
-                    row["Se(Sp95)"] = true_pos_rate[x]
-
-                    x = np.searchsorted(false_pos_rate, 0.03)
-                    row["Se(Sp97)"] = true_pos_rate[x]
-
-                    x = np.searchsorted(false_pos_rate, 0.01)
-                    row["Se(Sp99)"] = true_pos_rate[x]
+            # report performance for each rhythm type (suggested by AHA guideline for AED development)
+            for rhythm_id, rhythm_name in enumerate(label_encoder.classes_):
+                y_test_rhythm_types = x_rhythm_types[x_test_idx]
+                idx = (y_test_rhythm_types == rhythm_id)
+                rhythm_y_test = y_test[idx]
+                rhythm_y_predict = y_predict[idx]
+                # convert to binary classification for each type of arrythmia
+                bin_y_test = np.zeros((len(rhythm_y_test), 1))
+                bin_y_predict = np.zeros((len(rhythm_y_predict), 1))
+                if rhythm_name in shockable_rhythms:  # for shockable rhythms, report sensitivity (TPR)
+                    if rhythm_name == "(VF,coarse" or rhythm_name == "(VT,rapid":
+                        target = SHOCKABLE
+                    else:
+                        target = INTERMEDIATE
+                    bin_y_test[rhythm_y_test == target] = 1
+                    bin_y_predict[rhythm_y_predict == target] = 1
+                    result = BinaryClassificationResult(bin_y_test, bin_y_predict)
+                    row["Se[{0}]".format(rhythm_name)] = result.sensitivity
+                else:  # for non-shockable rhythms, report specificity (TNR)
+                    bin_y_test[rhythm_y_test == NON_SHOCKABLE] = 1
+                    bin_y_predict[rhythm_y_predict == NON_SHOCKABLE] = 1
+                    result = BinaryClassificationResult(bin_y_test, bin_y_predict)
+                    row["Sp[{0}]".format(rhythm_name)] = result.sensitivity
 
             # best parameters of grid search
             row.update(grid.best_params_)
@@ -416,7 +399,7 @@ def main():
                 fields = ["sample", "record", "begin", "rhythm"] + [str(i) for i in range(1, n_test_iters + 1)] + ["tested", "errors", "error rate", "class", "predict"]
                 writer.writerow(fields)  # write header for csv
                 for i, info in enumerate(x_data_info):
-                    label = y_data[i]
+                    label = aha_y_data[i]
                     x_predict_results = predict_results[i, :]  # prediction results of all iterations for this sample x
                     row = [(i + 1), info.record_name, info.begin_time, info.rhythm]
                     n_included = 0
