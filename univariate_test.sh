@@ -5,7 +5,7 @@ n_iters=10
 models="adaboost logistic_regression random_forest"
 for model in $models;
 do
-    features="TCSC TCI STE MEA PSR HILB VF M A2 FM LZ SpEn MAV C1 C2 C3"
+    features="TCSC TCI STE MEA PSR HILB VF M A2 FM LZ SpEn MAV Count1 Count2 Count3 IMF1_LZ IMF5_LZ"
     for feature in $features;
     do
         echo "Test:" $model $feature

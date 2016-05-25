@@ -26,10 +26,13 @@ def extract_features(idx, segment, resample_rate, update_features, verbose):
         feature_names = set(update_features)
     else:
         feature_names = vf_features.feature_names_set
-    features, qrs_beats = vf_features.extract_features(signals, sampling_rate, feature_names)
+    features, qrs_beats, amplitude = vf_features.extract_features(signals, sampling_rate, feature_names)
 
     # store all of the detected beats as part of the info
     info.detected_beats = qrs_beats
+
+    # store amplitude info,too
+    info.amplitude = amplitude
 
     print("{0}: {1}/{2}".format(idx, info.record_name, info.begin_time))
     if verbose:

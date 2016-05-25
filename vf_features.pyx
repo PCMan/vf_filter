@@ -9,10 +9,32 @@ import pyeeg  # calculate sample entropy
 import matplotlib.pyplot as plt
 from array import array  # python array with static types
 import pickle
-from qrs_detect import qrs_detect
+from qrs_detect import qrs_detect  # QRS detector
+from ptsa.ptsa.emd import emd  # empirical mode decomposition
 
 
-feature_names = ("TCSC", "TCI", "STE", "MEA", "PSR", "HILB", "VF", "M", "A2", "FM", "LZ", "SpEn", "MAV", "C1", "C2", "C3", "AMP")
+feature_names = (
+    "TCSC",        # threshold crossing sample count
+    "TCI",         # threshold crossing interval
+    "STE",         # standard exponential
+    "MEA",         # modified exponential
+    "PSR",         # phase space reconstruction (time-delay method)
+    "HILB",        # Hilbert transformation-based PSR
+    "VF",          # VF leak (VF filter)
+    "M",           # first spectral moment
+    "A2",          # A2 of spectrum
+    "FM",          # central frequency of power spectrum
+    "LZ",          # LZ complexity
+    "SpEn",        # sample entropy (5-second)
+    "MAV",         # mean absolute value
+    "Count1",      # count 1
+    "Count2",      # count 2
+    "Count3",      # count 3
+    "Amplitude",   # amplitude of the signals
+    "IMF1_LZ",     # LZ complexity of EMD IMF1
+    "IMF5_LZ",     # LZ complexity of EMD IMF5
+    # "SpecLZ",    # LZ complexity of spectrum
+)
 feature_names_set = set(feature_names)
 
 # time domain/morphology
@@ -454,6 +476,17 @@ cdef double lempel_ziv_complexity(bytearray bin_str):
     return cn / bn
 
 
+cdef bytearray array_to_binary_byte_string(data):
+    cdef bytearray bin_str = bytearray()
+    cdef int byte
+    cdef str bit
+    cdef int zero_char = ord("0")
+    for byte in data.tobytes():
+        for bit in bin(byte)[2:]:  # the return value of bin() always starts with "0b", skip it.
+            bin_str.append(ord(bit) - zero_char)  # convert from "1" or "0" to integer value
+    return bin_str
+
+
 # Implement the algorithm described in the paper:
 # Xu-Sheng Zhang et al. 1999. Detecting Ventricular Tachycardia and Fibrillation by Complexity Measure
 cdef double complexity_measure(np.ndarray[double, ndim=1] samples):
@@ -700,22 +733,42 @@ cpdef extract_features(np.ndarray[double, ndim=1] samples, int sampling_rate, se
 
     # Auxiliary counts (count1, 2, 3)
     cdef int count1 = 0, count2 = 0, count3 = 0
-    if features_to_extract & {"C1", "C2", "C3"}:
+    if features_to_extract & {"Count1", "Count2", "Count3"}:
         (count1, count2, count3) = auxiliary_counts(samples, sampling_rate)
-        if "C1" not in features_to_extract:
+        if "Count1" not in features_to_extract:
             count1 = 0
-        if "C2" not in features_to_extract:
+        if "Count2" not in features_to_extract:
             count2 = 0
-        if "C3" not in features_to_extract:
+        if "Count3" not in features_to_extract:
             count3 = 0
     result.append(count1)
     result.append(count2)
     result.append(count3)
 
     # amplitude of the raw signals
-    result.append(amplitude)
+    result.append(amplitude if "Amplitude" in features_to_extract else 0.0)
 
-    return result, beats
+    cdef double imf1_lz = 0.0, imf5_lz = 0.0
+    cdef bytearray bin_imf
+    # Empirical mode decomposition (EMD)
+    if features_to_extract & {"IMF1_LZ", "IMF5_LZ"}:
+        # perform EMD
+        imf = emd(samples, max_modes=5)
+        # IMF1_LZ, LZ complexity of EMD IMF1
+        if "IMF1_LZ" in features_to_extract:
+            # convert IMF1 to binary string
+            bin_imf = array_to_binary_byte_string(array("d", imf[0]))
+            imf1_lz = lempel_ziv_complexity(bin_imf)
+
+        # IMF5_LZ, LZ complexity of EMD IMF5
+        if "IMF5_LZ" in features_to_extract:
+            # convert IMF5 to binary string
+            bin_imf = array_to_binary_byte_string(array("d", imf[4]))
+            imf5_lz = lempel_ziv_complexity(bin_imf)
+    result.append(imf1_lz)
+    result.append(imf5_lz)
+
+    return result, beats, amplitude
 
 
 # load features from data file
