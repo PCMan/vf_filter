@@ -11,6 +11,7 @@ from array import array  # python array with static types
 import pickle
 from qrs_detect import qrs_detect  # QRS detector
 from ptsa.ptsa.emd import emd  # empirical mode decomposition
+import sys  # for byteorder
 
 
 feature_names = (
@@ -479,13 +480,20 @@ cdef double lempel_ziv_complexity(bytearray bin_str):
 # Convert an array with supported element types to binary string.
 # The result is stored in bytearray with each byte representing a bit in the original data (1 or 0).
 # Though this is not memory efficient, it's easier for complexity computation later.
-cdef bytearray array_to_binary_byte_string(data):
+# data should be an Python array.array instance.
+cpdef bytearray array_to_binary_byte_string(object data, int bits_per_element, bint little_endian):
     cdef bytearray bin_str = bytearray()
     cdef int byte
-    cdef str bit
+    cdef str bit, bits
     cdef int zero_char = ord("0")
+    cdef bit_format_spec = "0{0}b".format(bits_per_element)
     for byte in data.tobytes():
-        for bit in bin(byte)[2:]:  # the return value of bin() always starts with "0b", skip it.
+        bits = format(byte, bit_format_spec)  # convert to binary
+        if little_endian:  # little endian byte order
+            bits = bits[-bits_per_element:]  # we want to low bits
+        else:   # big endian
+            bits = bits[:bits_per_element]  # we want to high bits
+        for bit in bits:
             bin_str.append(ord(bit) - zero_char)  # convert from "1" or "0" to integer value
     return bin_str
 
@@ -554,6 +562,31 @@ cdef tuple auxiliary_counts(np.ndarray[double, ndim=1] samples, int sampling_rat
         count3 += np.sum(np.logical_and(fs_segment >= (fs_mean - fs_md), fs_segment <= (fs_mean + fs_md)))
     return (count1, count2, count3)
 
+
+cdef emd_features(np.ndarray[double, ndim=1] samples, int sampling_rate, list imf_modes):
+    imf_lz = array("d")
+    # resample to 250 Hz
+    if sampling_rate != 250:
+        samples = signal.resample(samples, int((len(samples) / sampling_rate) * 250))
+    # normalize to 0 - 1
+    samples -= np.min(samples)
+    samples /= np.max(samples)
+    # normalize to 0 - 2^12 (convert to 12 bit resolution)
+    cdef np.ndarray[np.uint16_t, ndim=1] emd_samples = (samples * (2 ** 12)).astype("uint16")
+    # perform EMD
+    imfs = emd(emd_samples, max_modes=max(imf_modes))
+    cdef int imf_mode
+    cdef np.ndarray[np.uint16_t, ndim=1] imf
+    cdef bytearray bin_imf
+    cdef bint little_endian
+    for imf_mode in imf_modes:
+        # IMF1_LZ: LZ complexity of EMD IMF
+        imf = imfs[imf_mode - 1].astype("uint16")
+        # determine byte_order
+        little_endian = True if sys.byteorder == "little" else False
+        bin_imf = array_to_binary_byte_string(array("H", imf), 12, little_endian)  # H means unsigned short int.
+        imf_lz.append(lempel_ziv_complexity(bin_imf))
+    return imf_lz
 
 
 # Find the max peak-to-peak amplitude in the samples
@@ -755,19 +788,15 @@ cpdef extract_features(np.ndarray[double, ndim=1] samples, int sampling_rate, se
     cdef bytearray bin_imf
     # Empirical mode decomposition (EMD)
     if features_to_extract & {"IMF1_LZ", "IMF5_LZ"}:
-        # perform EMD
-        imf = emd(samples, max_modes=5)
+        # FIXME: allow only update one IMF mode
+        imf_modes = [1, 5]
+        imf_lz = emd_features(samples, sampling_rate, imf_modes)
         # IMF1_LZ, LZ complexity of EMD IMF1
         if "IMF1_LZ" in features_to_extract:
-            # convert IMF1 to binary string
-            bin_imf = array_to_binary_byte_string(array("d", imf[0]))
-            imf1_lz = lempel_ziv_complexity(bin_imf)
-
+            imf1_lz = imf_lz[0]
         # IMF5_LZ, LZ complexity of EMD IMF5
         if "IMF5_LZ" in features_to_extract:
-            # convert IMF5 to binary string
-            bin_imf = array_to_binary_byte_string(array("d", imf[4]))
-            imf5_lz = lempel_ziv_complexity(bin_imf)
+            imf5_lz = imf_lz[1]
     result.append(imf1_lz)
     result.append(imf5_lz)
 
