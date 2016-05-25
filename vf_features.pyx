@@ -476,6 +476,9 @@ cdef double lempel_ziv_complexity(bytearray bin_str):
     return cn / bn
 
 
+# Convert an array with supported element types to binary string.
+# The result is stored in bytearray with each byte representing a bit in the original data (1 or 0).
+# Though this is not memory efficient, it's easier for complexity computation later.
 cdef bytearray array_to_binary_byte_string(data):
     cdef bytearray bin_str = bytearray()
     cdef int byte
