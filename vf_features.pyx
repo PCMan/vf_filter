@@ -36,6 +36,7 @@ feature_names = (
     "IMF5_LZ",          # LZ complexity of EMD IMF5
     "RR",               # average RR interval (0 if no QRS is detected)
     "RR_Std",           # standard deviation of RR (0 if no QRS is detected)
+    "RR_CV",            # standard deviation of RR / mean RR (0 if no QRS is detected)
     "UR",               # unknown beats/all beats (0 if no QRS is detected)
     "VR",               # VPC beats/all beats (0 if no QRS is detected)
     # "SpecLZ",    # LZ complexity of spectrum
@@ -836,10 +837,12 @@ cpdef extract_features(np.ndarray[double, ndim=1] samples, int sampling_rate, se
     result.append(imf1_lz)
     result.append(imf5_lz)
 
-    cdef double rr_avg, rr_std, unknwon_ratio, vpc_ratio
+    cdef double rr_avg, rr_std, unknwon_ratio, vpc_ratio, rr_cv
     (rr_avg, rr_std, unknwon_ratio, vpc_ratio) = beat_statistics(beats)
+    rr_cv = rr_std / rr_avg if rr_avg else 0.0
     result.append(rr_avg if "RR" in features_to_extract else 0.0)
     result.append(rr_std if "RR_Std" in features_to_extract else 0.0)
+    result.append(rr_cv if "RR_CV" in features_to_extract else 0.0)
     result.append(unknwon_ratio if "UR" in features_to_extract else 0.0)
     result.append(vpc_ratio if "VR" in features_to_extract else 0.0)
 

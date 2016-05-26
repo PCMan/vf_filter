@@ -6,7 +6,6 @@ from sklearn import ensemble
 from sklearn import cross_validation
 from sklearn import metrics
 from sklearn import grid_search
-from sklearn.base import BaseEstimator
 import vf_data
 from vf_features import load_features, feature_names
 from vf_eval import *
@@ -316,9 +315,9 @@ def main():
             # Here we split the indicies of the rows rather than the data array itself.
             x_indicies = list(range(len(x_data)))
             x_train_idx, x_test_idx, y_train, y_test = cross_validation.train_test_split(x_indicies,
-                                                                                                                                         binary_y_data,
-                                                                                                                                         test_size=test_size,
-                                                                                                                                         stratify=aha_y_data)  # stratify=x_rhythm_types does not work due to low number of some classes. :-(
+                                                                                         binary_y_data,
+                                                                                         test_size=test_size,
+                                                                                         stratify=aha_y_data)  # stratify=x_rhythm_types does not work due to low number of some classes. :-(
             # training dataset
             x_train = x_data[x_train_idx]
             # testing dataset
