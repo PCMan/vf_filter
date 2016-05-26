@@ -2,6 +2,8 @@
 # import pyximport; pyximport.install()
 # evaluation tools for classification
 import numpy as np
+import vf_classify
+from sklearn import metrics
 
 
 def balanced_error_rate(y_true, y_predict):
@@ -46,3 +48,35 @@ class MultiClassificationResult:
             result = BinaryClassificationResult(bin_y_true, bin_y_predict)
             results.append(result)
         self.results = results
+
+
+def custom_score(y_true, y_predict):
+    counts = np.bincount(y_true)
+    if len(counts) == 2:  # binary classification
+        return metrics.fbeta_score(y_true, y_predict, beta=0.5, pos_label=vf_classify.DANGEROUS_RHYTHM, average="binary")
+    elif len(counts) == 3:  # AHA classification
+        shockable_idx = (y_true == vf_classify.SHOCKABLE)
+        n_shockable = np.sum(shockable_idx)
+        if n_shockable:
+            shockable_f1 = metrics.fbeta_score(y_true[shockable_idx], y_predict[shockable_idx], beta=0.8, pos_label=vf_classify.SHOCKABLE, average="binary")
+            shockable_f1 *= len(y_true) / n_shockable
+        else:
+            shockable_f1 = 0.0
+
+        intermediate_idx = (y_true == vf_classify.INTERMEDIATE)
+        n_intermediate = np.sum(intermediate_idx)
+        if n_intermediate:
+            intermidiate_f1 = metrics.fbeta_score(y_true[intermediate_idx], y_predict[intermediate_idx], beta=0.5, pos_label=vf_classify.INTERMEDIATE, average="binary")
+            intermidiate_f1 *= len(y_true) / n_intermediate
+        else:
+            intermidiate_f1 = 0.0
+
+        non_shockable_idx = (y_true == vf_classify.NON_SHOCKABLE)
+        n_non_shockable = np.sum(non_shockable_idx)
+        if n_non_shockable:
+            non_shockable_f1 = metrics.f1_score(y_true[non_shockable_idx], y_predict[non_shockable_idx], pos_label=vf_classify.NON_SHOCKABLE, average="binary")
+            non_shockable_f1 *= len(y_true) / n_non_shockable
+        else:
+            non_shockable_f1 = 0.0
+        return np.mean([shockable_f1 * 0.95, intermidiate_f1 * 0.25, non_shockable_f1 * 0.99]) / (0.95 + 0.25 + 0.99)
+    return 0.0

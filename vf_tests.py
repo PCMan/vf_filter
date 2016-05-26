@@ -166,6 +166,8 @@ def main():
     # build scoring function
     if args.scorer == "ber":  # BER-based scoring function
         cv_scorer = metrics.make_scorer(balanced_error_rate, greater_is_better=False)
+    elif args.scorer == "custom":  # our custom error function
+        cv_scorer = metrics.make_scorer(custom_score)
     else:
         cv_scorer = args.scorer
         # cv_scorer = metrics.make_scorer(metrics.fbeta_score, beta=10.0)
@@ -257,15 +259,11 @@ def main():
                                             n_jobs=n_jobs,
                                             cv=n_cv_folds,
                                             verbose=0)
-            grid.fit(x_train, y_train)  # perform the classification training
-            y_predict = grid.predict(x_test)
-
-            if args.error_log:  # calculate error statistics for each sample
-                included_idx = np.array(x_test_idx)  # samples included in this test iteration
-                predict_results[included_idx, it - 1] = y_predict  # remember prediction results of all included samples
+            #grid.fit(x_train, y_train)  # perform the classification training
+            #y_predict = grid.predict(x_test)
 
             # output the result of classification to csv file
-            output_binary_result(row, y_test, y_predict)
+            #output_binary_result(row, y_test, y_predict)
 
             # perform final classification based on AHA classification scheme
             y_train = aha_y_data[x_train_idx]
@@ -273,6 +271,10 @@ def main():
             grid.fit(x_train, y_train)  # perform the classification training
             y_predict = grid.predict(x_test)
             # y_predict = aha_classifier(x_test, x_test_info, y_predict)  # the predicted AHA class
+
+            if args.error_log:  # calculate error statistics for each sample
+                included_idx = np.array(x_test_idx)  # samples included in this test iteration
+                predict_results[included_idx, it - 1] = y_predict  # remember prediction results of all included samples
 
             if args.scorer in ("f1_weighted", "f1"):
                 # calculate training error
