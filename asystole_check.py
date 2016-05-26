@@ -2,7 +2,7 @@
 import pyximport; pyximport.install()  # use Cython
 import qrs_detect
 import vf_data
-import vf_features
+import signal_processing
 import argparse
 
 
@@ -34,11 +34,11 @@ def main():
         rhythm = info.rhythm
         samples = segment.signals
         # trend removal (drift suppression)
-        samples = vf_features.drift_supression(samples, 1, info.sampling_rate)
+        samples = signal_processing.drift_supression(samples, 1, info.sampling_rate)
         # smoothing
-        samples = vf_features.moving_average(samples)
+        samples = signal_processing.moving_average(samples)
 
-        amplitude = vf_features.get_amplitude(samples, info.sampling_rate)
+        amplitude = signal_processing.get_amplitude(samples, info.sampling_rate)
         # beats = qrs_detect.qrs_detect(signals, info.sampling_rate, info.adc_zero, info.gain)
 
         # if the amplitude is very low but the label is not asystole, change it

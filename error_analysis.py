@@ -9,6 +9,8 @@ from datetime import timedelta
 import scipy as sp
 import numpy as np
 import matplotlib.pyplot as plt
+import signal_processing
+
 
 MAX_QUEUE_SIZE = 50
 record_cache = deque()  # a simple LRU cache for loaded records
@@ -75,19 +77,19 @@ def plot_sample(info, signals):
     signals = signals - np.mean(signals)
 
     # 5-order moving average
-    signals = vf_features.moving_average(signals, order=5)
+    signals = signal_processing.moving_average(signals, order=5)
     ax = axes[1, 0]
     ax.set_title("moving average")
     ax.plot(signals)
 
     # drift supression
-    signals = vf_features.drift_supression(signals, 1, info.sampling_rate)
+    signals = signal_processing.drift_supression(signals, 1, info.sampling_rate)
     ax = axes[2, 0]
     ax.set_title("drift supression (cutoff: 1 Hz)")
     ax.plot(signals)
 
     # band pass filter
-    signals = vf_features.butter_lowpass_filter(signals, 30, info.sampling_rate)
+    signals = signal_processing.butter_lowpass_filter(signals, 30, info.sampling_rate)
     ax = axes[3, 0]
     ax.set_title("Butterworth high pass filter (cutoff: 30Hz)")
     ax.plot(signals)
