@@ -167,7 +167,7 @@ def main():
     if args.scorer == "ber":  # BER-based scoring function
         cv_scorer = metrics.make_scorer(balanced_error_rate, greater_is_better=False)
     elif args.scorer == "f_beta":
-        cv_scorer = metrics.make_scorer(metrics.fbeta_score, beta=0.5, average="weighted")
+        cv_scorer = metrics.make_scorer(metrics.fbeta_score, beta=2, average="weighted")
     elif args.scorer == "custom":  # our custom error function
         cv_scorer = metrics.make_scorer(custom_score)
     else:
