@@ -259,11 +259,11 @@ def main():
                                             n_jobs=n_jobs,
                                             cv=n_cv_folds,
                                             verbose=0)
-            #grid.fit(x_train, y_train)  # perform the classification training
-            #y_predict = grid.predict(x_test)
+            grid.fit(x_train, y_train)  # perform the classification training
+            y_predict = grid.predict(x_test)
 
             # output the result of classification to csv file
-            #output_binary_result(row, y_test, y_predict)
+            output_binary_result(row, y_test, y_predict)
 
             # perform final classification based on AHA classification scheme
             y_train = aha_y_data[x_train_idx]
