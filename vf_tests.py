@@ -55,14 +55,17 @@ def create_aha_labels(x_data, x_data_info):
                 y_data[i] = SHOCKABLE
             else:  # fine VF
                 y_data[i] = INTERMEDIATE
-        elif rhythm == "(VT":
+        elif rhythm in ("(VT", "(VFL"):
+            # VFL is VF with HR > 240 BPM, so it's kind of rapid VT
+            # However, in the dataset we found segments with slower heart rate
+            # marked as VFL. So let's double check here
             hr = info.get_heart_rate()
             if hr >= RAPID_VT_RATE:
                 y_data[i] = SHOCKABLE
             elif hr > 0:
                 y_data[i] = INTERMEDIATE
-        elif rhythm == "(VFL":  # VFL is VF with HR > 240 BPM, so it's kind of rapid VT
-                y_data[i] = SHOCKABLE
+            else:  # no heart rate information
+                y_data[i] = SHOCKABLE if rhythm == "(VFL" else INTERMEDIATE
     return y_data
 
 
@@ -172,7 +175,8 @@ def create_csv_fields(label_encoder):
             csv_fields.append("Sp[{0}]".format(class_name))
     return csv_fields
 
-# final clasification based on AHA requirements
+
+# final classification based on AHA requirements
 def aha_classifier(x_test, x_test_info, binary_y_predict):
     aha_y_predict = np.zeros(len(x_test), dtype="int")
     for i in range(len(x_test)):
@@ -186,14 +190,20 @@ def aha_classifier(x_test, x_test_info, binary_y_predict):
             # here we get the stored QRS detection result done previously for speed up.
             beats = info.detected_beats
             if beats:  # heart beats are detected
+                # This can be VF (shockable), slow VT (intermediate), or other misclassified "safe" rhythms
+                # FIXME: find a method to distinguish them
                 hr = (len(beats) / info.get_duration()) * 60  # average HR (BPM)
+                rr_average, rr_std, abnormal_beats = beat_statistics(info.detected_beats)
+                rr_cv = rr_std / rr_average if rr_average else 0.0
+                print(info.rhythm, "HR:", hr, "RR:", rr_average, "RR_std", rr_std, "RR_CV:", rr_cv,
+                      "abnormal ratio:", abnormal_beats,
+                      "IMF1:", x_test[i][-2], "IMF5:", x_test[i][-1])
+                print("\t", info.detected_beats)
                 if hr >= RAPID_VT_RATE:  # this is either rapid VT or VF (both are shockable, no need to distinguish them)
                     y = SHOCKABLE
                 else:  # this rhythm is slower than 180 BPM
-                    # This can be VF (shockable) or slow VT (intermediate)
-                    # TODO: find a method to distinguish them
                     y = INTERMEDIATE
-            else:  # no QRS complex was found, this must be VF
+            else:  # no QRS complex was found, this must be VF or asystole
                 if amplitude >= COARSE_VF_THRESHOLD:
                     y = SHOCKABLE
                 else:
@@ -273,6 +283,14 @@ def main():
     # try to classify the samples using a beat detector and simple heuristics
     # y_basic_predict = basic_classify(x_data, x_data_info)
 
+    # How many samples cannot be detected with QRS detector??
+    n_no_qrs = 0
+    for info in x_data_info:
+        if not info.detected_beats:
+            print("No QRS!!", info.rhythm, info.record_name, info.begin_time)
+            n_no_qrs += 1
+    print(n_no_qrs, "samples has no detected QRS.")
+
     # build estimator to test
     estimator, param_grid, support_class_weight = create_estimator(estimator_name, class_weight)
 
@@ -343,8 +361,12 @@ def main():
                 row["precision[{0}]".format(class_name)] = result.precision
 
             # perform final classification based on AHA classification scheme
+            y_train = aha_y_data[x_train_idx]
             y_test = aha_y_data[x_test_idx]  # the actual AHA class
-            y_predict = aha_classifier(x_test, x_test_info, y_predict)  # the predicted AHA class
+            grid.fit(x_train, y_train)  # perform the classification training
+            y_predict = grid.predict(x_test)
+            # y_predict = aha_classifier(x_test, x_test_info, y_predict)  # the predicted AHA class
+
             # report the performance of final AHA classification
             results = MultiClassificationResult(y_test, y_predict, classes=aha_classes).results
             for class_name, result in zip(aha_classe_names, results):

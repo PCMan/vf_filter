@@ -15,27 +15,33 @@ import sys  # for byteorder
 
 
 feature_names = (
-    "TCSC",        # threshold crossing sample count
-    "TCI",         # threshold crossing interval
-    "STE",         # standard exponential
-    "MEA",         # modified exponential
-    "PSR",         # phase space reconstruction (time-delay method)
-    "HILB",        # Hilbert transformation-based PSR
-    "VF",          # VF leak (VF filter)
-    "M",           # first spectral moment
-    "A2",          # A2 of spectrum
-    "FM",          # central frequency of power spectrum
-    "LZ",          # LZ complexity
-    "SpEn",        # sample entropy (5-second)
-    "MAV",         # mean absolute value
-    "Count1",      # count 1
-    "Count2",      # count 2
-    "Count3",      # count 3
-    "Amplitude",   # amplitude of the signals
-    "IMF1_LZ",     # LZ complexity of EMD IMF1
-    "IMF5_LZ",     # LZ complexity of EMD IMF5
+    "TCSC",             # threshold crossing sample count
+    "TCI",              # threshold crossing interval
+    "STE",              # standard exponential
+    "MEA",              # modified exponential
+    "PSR",              # phase space reconstruction (time-delay method)
+    "HILB",             # Hilbert transformation-based PSR
+    "VF",               # VF leak (VF filter)
+    "M",                # first spectral moment
+    "A2",               # A2 of spectrum
+    "FM",               # central frequency of power spectrum
+    "LZ",               # LZ complexity
+    "SpEn",             # sample entropy (5-second)
+    "MAV",              # mean absolute value
+    "Count1",           # count 1
+    "Count2",           # count 2
+    "Count3",           # count 3
+    "Amplitude",        # amplitude of the signals
+    "IMF1_LZ",          # LZ complexity of EMD IMF1
+    "IMF5_LZ",          # LZ complexity of EMD IMF5
+    "RR",               # average RR interval (0 if no QRS is detected)
+    "RR_Std",           # standard deviation of RR (0 if no QRS is detected)
+    "UR",               # unknown beats/all beats (0 if no QRS is detected)
+    "VR",               # VPC beats/all beats (0 if no QRS is detected)
     # "SpecLZ",    # LZ complexity of spectrum
 )
+
+
 feature_names_set = set(feature_names)
 
 # time domain/morphology
@@ -589,6 +595,36 @@ cdef emd_features(np.ndarray[double, ndim=1] samples, int sampling_rate, list im
     return imf_lz
 
 
+cdef tuple beat_statistics(list beats):
+    cdef double rr_average = 0.0
+    cdef double rr_std = 0.0
+    cdef double unknown_beats = 0.0
+    cdef double vpc_beats = 0.0
+    rr_intervals = array("d")
+    cdef int last_beat_time, beat_time
+    cdef str last_beat_type, beat_type
+    cdef i
+    cdef double rr_interval
+    for i in range(1, len(beats)):
+        last_beat_time, last_beat_type = beats[i - 1]
+        beat_time, beat_type = beats[i]
+        rr_interval = <double>(beat_time - last_beat_time) / 200.0  # sampling rate: 200
+        rr_intervals.append(rr_interval)
+        if beat_type == "Q":
+            unknown_beats += 1
+        elif beat_type == "V":
+            vpc_beats += 1
+
+    if rr_intervals:
+        rr_average = np.mean(rr_intervals)
+        rr_std = np.std(rr_intervals)
+
+    if len(beats):
+        unknown_beats /= len(beats)
+        vpc_beats /= len(beats)
+    return rr_average, rr_std, unknown_beats, vpc_beats
+
+
 # Find the max peak-to-peak amplitude in the samples
 # The amplitudes of samples should be converted to "mV" prior to calling this function.
 cpdef double get_amplitude(np.ndarray[double, ndim=1] samples, int sampling_rate, plot=None):
@@ -799,6 +835,13 @@ cpdef extract_features(np.ndarray[double, ndim=1] samples, int sampling_rate, se
             imf5_lz = imf_lz[1]
     result.append(imf1_lz)
     result.append(imf5_lz)
+
+    cdef double rr_avg, rr_std, unknwon_ratio, vpc_ratio
+    (rr_avg, rr_std, unknwon_ratio, vpc_ratio) = beat_statistics(beats)
+    result.append(rr_avg if "RR" in features_to_extract else 0.0)
+    result.append(rr_std if "RR_Std" in features_to_extract else 0.0)
+    result.append(unknwon_ratio if "UR" in features_to_extract else 0.0)
+    result.append(vpc_ratio if "VR" in features_to_extract else 0.0)
 
     return result, beats, amplitude
 
