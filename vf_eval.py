@@ -50,11 +50,45 @@ class MultiClassificationResult:
         self.results = results
 
 
+def to_bin_label(y, pos_label):
+    bin_y = np.zeros(y.shape)
+    bin_y[y == pos_label] = 1
+    return bin_y
+
+
 def custom_score(y_true, y_predict):
     counts = np.bincount(y_true)
     if len(counts) == 2:  # binary classification
         return metrics.fbeta_score(y_true, y_predict, beta=0.5, pos_label=vf_classify.DANGEROUS_RHYTHM, average="binary")
     elif len(counts) == 3:  # AHA classification
+        y_bin_true = to_bin_label(y_true, vf_classify.SHOCKABLE)
+        y_bin_predict = to_bin_label(y_predict, vf_classify.SHOCKABLE)
+        n_shockable = np.sum(y_bin_true)
+        if n_shockable:
+            shockable_f1 = metrics.fbeta_score(y_bin_true, y_bin_predict, beta=0.8, average="binary")
+            shockable_f1 *= len(y_true) / n_shockable
+        else:
+            shockable_f1 = 0.0
+
+        y_bin_true = to_bin_label(y_true, vf_classify.INTERMEDIATE)
+        y_bin_predict = to_bin_label(y_predict, vf_classify.INTERMEDIATE)
+        n_intermediate = np.sum(y_bin_true)
+        if n_intermediate:
+            intermidiate_f1 = metrics.fbeta_score(y_bin_true, y_bin_predict, beta=0.8, average="binary")
+            intermidiate_f1 *= len(y_true) / n_intermediate
+        else:
+            intermidiate_f1 = 0.0
+
+        y_bin_true = to_bin_label(y_true, vf_classify.NON_SHOCKABLE)
+        y_bin_predict = to_bin_label(y_predict, vf_classify.NON_SHOCKABLE)
+        n_non_shockable = np.sum(y_bin_true)
+        if n_non_shockable:
+            non_shockable_f1 = metrics.fbeta_score(y_bin_true, y_bin_predict, beta=0.8, average="binary")
+            non_shockable_f1 *= len(y_true) / n_non_shockable
+        else:
+            non_shockable_f1 = 0.0
+
+        """
         shockable_idx = (y_true == vf_classify.SHOCKABLE)
         n_shockable = np.sum(shockable_idx)
         if n_shockable:
@@ -78,5 +112,6 @@ def custom_score(y_true, y_predict):
             non_shockable_f1 *= len(y_true) / n_non_shockable
         else:
             non_shockable_f1 = 0.0
+        """
         return np.mean([shockable_f1 * 0.95, intermidiate_f1 * 0.25, non_shockable_f1 * 0.99]) / (0.95 + 0.25 + 0.99)
     return 0.0
