@@ -133,7 +133,7 @@ def main():
     parser = argparse.ArgumentParser()
     # known estimators
     estimator_names = ("logistic_regression", "random_forest", "adaboost", "gradient_boosting", "svc", "mlp1", "mlp2")
-    scorer_names = ("ber", "f1", "accuracy", "precision", "f1_weighted", "precision_weighted", "custom")
+    scorer_names = ("ber", "f1", "accuracy", "precision", "f1_weighted", "precision_weighted", "f_beta", "custom")
     parser.add_argument("-m", "--model", type=str, required=True, choices=estimator_names)
     parser.add_argument("-i", "--input", type=str, required=True)
     parser.add_argument("-o", "--output", type=str, required=True)
@@ -166,6 +166,8 @@ def main():
     # build scoring function
     if args.scorer == "ber":  # BER-based scoring function
         cv_scorer = metrics.make_scorer(balanced_error_rate, greater_is_better=False)
+    elif args.scorer == "f_beta":
+        cv_scorer = metrics.make_scorer(metrics.fbeta_score, beta=0.5)
     elif args.scorer == "custom":  # our custom error function
         cv_scorer = metrics.make_scorer(custom_score)
     else:
