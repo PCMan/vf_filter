@@ -34,6 +34,7 @@ RAPID_VT_RATE = 180
 # 0.2 mV is suggested by AHA
 COARSE_VF_THRESHOLD = 0.2
 
+
 def create_aha_labels(x_data, x_data_info):
     y_data = np.zeros(len(x_data_info), dtype="int")
     for i in range(len(x_data)):
@@ -402,6 +403,14 @@ def main():
             rows.append(row)  # remember each row so we can calculate average for them later
             print("\n".join(["\t{0} = {1}".format(field, row.get(field, 0.0)) for field in csv_fields[1:]]))
             writer.writerow(row)
+
+            # feature importance
+            if hasattr(grid.best_estimator_, "feature_importances_"):
+                fs_scores = grid.best_estimator_.feature_importances_
+                print("Feature importance:")
+                for name, score in sorted(zip(feature_names, fs_scores), key=lambda x: x[1], reverse=True):
+                    print(name, score)
+
             print("-" * 80)
 
         # calculate average for all iterations automatically and write to csv

@@ -210,8 +210,9 @@ cdef double modified_exponential(np.ndarray[double, ndim=1] samples, int samplin
     cdef int n_lifted = 0
     cdef int n_samples = len(samples)
     time_constant *= sampling_rate  # in terms of samples
-    # find all local maximum and get their time values
-    local_max_indices = iter(signal.argrelmax(samples)[0])
+    # find all local maximum and get their time values (the original paper did not describe how to do this. :-( )
+    cdef int half_peak_width = int(np.round(0.05 * sampling_rate))  # make peak detection less sensitive
+    local_max_indices = iter(signal.argrelmax(samples, order=half_peak_width)[0])
     cdef double sample, local_max
     cdef int t, local_max_idx
     try:
