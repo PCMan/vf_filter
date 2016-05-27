@@ -18,7 +18,7 @@ SHOCKABLE = 1
 INTERMEDIATE = 2
 aha_classes = (NON_SHOCKABLE, SHOCKABLE, INTERMEDIATE)
 aha_classe_names = ["non-shockable", "shockable", "intermediate"]
-shockable_rhythms = ("(VF", "(VT", "(VFL")
+shockable_rhythms = ("(VF,coarse", "(VF,fine", "(VT,rapid", "(VT,slow")
 
 # Use threshold value: 180 BPM to define rapid VT
 # Reference: Nishiyama et al. 2015. Diagnosis of Automated External Defibrillators (JAHA)
@@ -30,7 +30,9 @@ COARSE_VF_THRESHOLD = 0.2
 estimator_names = ("logistic_regression", "random_forest", "adaboost", "gradient_boosting", "svc_linear", "svc_poly", "svc_rbf", "mlp1", "mlp2")
 
 
-def create_aha_labels(x_data, x_data_info):
+# Generate y labels for each input data point according to AHA classification scheme
+# After calling this function, the "rhythm" fields of some x_data_info elements will be modified.
+def initialize_aha_labels(x_data, x_data_info):
     y_data = np.zeros(len(x_data_info), dtype="int")
     for i in range(len(x_data)):
         x = x_data[i]
@@ -48,8 +50,10 @@ def create_aha_labels(x_data, x_data_info):
         if rhythm == "(VF":
             if info.amplitude > COARSE_VF_THRESHOLD:  # coarse VF
                 y_data[i] = SHOCKABLE
+                info.rhythm = "(VF,coarse"
             else:  # fine VF
                 y_data[i] = INTERMEDIATE
+                info.rhythm = "(VF,fine"
         elif rhythm in ("(VT", "(VFL"):
             # VFL is VF with HR > 240 BPM, so it's kind of rapid VT
             # However, in the dataset we found segments with slower heart rate
@@ -57,18 +61,17 @@ def create_aha_labels(x_data, x_data_info):
             hr = info.get_heart_rate()
             if hr >= RAPID_VT_RATE:
                 y_data[i] = SHOCKABLE
+                info.rhythm = "(VT,rapid"
             elif hr > 0:
                 y_data[i] = INTERMEDIATE
+                info.rhythm = "(VT,slow"
             else:  # no heart rate information
-                y_data[i] = SHOCKABLE if rhythm == "(VFL" else INTERMEDIATE
-    return y_data
-
-
-def create_binary_labels(x_data_info):
-    y_data = np.zeros(len(x_data_info), dtype="int")
-    for i, info in enumerate(x_data_info):
-        if info.rhythm in shockable_rhythms:
-            y_data[i] = DANGEROUS_RHYTHM
+                if rhythm == "(VFL":
+                    y_data[i] = SHOCKABLE
+                    info.rhythm = "(VT,rapid"
+                else:
+                    y_data[i] = INTERMEDIATE
+                    info.rhythm = "(VT,slow"
     return y_data
 
 
@@ -99,7 +102,7 @@ def create_estimator(estimator_name, class_weight, n_features):
         from sklearn import linear_model
         estimator = linear_model.LogisticRegression(class_weight=class_weight)
         param_grid = {
-            "C": np.logspace(-2, 4, 10)
+            "C": np.logspace(-2, 4, 20)
         }
         support_class_weight = True
     elif estimator_name == "random_forest":
@@ -143,13 +146,13 @@ def create_estimator(estimator_name, class_weight, n_features):
                 estimator.set_params(kernel="rbf")
                 param_grid = {
                     "C": np.logspace(-2, 3, 10),
-                    "gamma": np.logspace(-2, -1, 2)
+                    "gamma": np.logspace(-2, -1, 4)
                 }
             else:  # poly
                 estimator.set_params(kernel="poly")
                 param_grid = {
                     "degree": [2],
-                    "C": np.logspace(-2, 3, 10)
+                    "C": np.logspace(-3, 1, 20)
                 }
         support_class_weight = True
     elif estimator_name == "mlp1" or estimator_name == "mlp2":  # multiple layer perceptron neural network

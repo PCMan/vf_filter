@@ -86,6 +86,15 @@ def output_feature_scores(row, estimator, selected_feature_names):
         for i, score in enumerate(scores):
             name = selected_feature_names[i]
             row[name] = score
+    elif hasattr(estimator, "coef_"):
+        coef = estimator.coef_  # coefficients
+        for class_id in range(0, 3):
+            print("class", class_id, "feature weights:")
+            weights = coef[class_id, :]
+            sorted_indices = np.argsort(np.abs(weights))
+            for idx in reversed(sorted_indices):
+                print("\t", selected_feature_names[idx], weights[idx])
+            print("-" * 20)
 
 
 def output_errors(log_filename, predict_results, x_data_info, aha_y_data):
@@ -177,14 +186,15 @@ def main():
     if args.exclude_rhythms:  # exclude samples with some rhythms from the test
         x_data, x_data_info = vf_classify.exclude_rhythms(x_data, x_data_info, args.exclude_rhythms)
 
+    # label the samples for AHA AED recommendation based multiclass scheme
+    aha_y_data = vf_classify.initialize_aha_labels(x_data, x_data_info)
+    # simplify the multi-class scheme to binary classification
+    binary_y_data = (aha_y_data != vf_classify.NON_SHOCKABLE).astype("int")
+
     # encode differnt types of rhythm names into numeric codes for stratified sampling later
     y_rhythm_names = [info.rhythm for info in x_data_info]
     label_encoder = preprocessing.LabelEncoder()
     x_rhythm_types = label_encoder.fit_transform(y_rhythm_names)
-
-    # label the samples for different classification scheme
-    binary_y_data = vf_classify.create_binary_labels(x_data_info)
-    aha_y_data = vf_classify.create_aha_labels(x_data, x_data_info)
 
     # build estimator to test
     estimator, param_grid, support_class_weight = vf_classify.create_estimator(estimator_name, class_weight, len(selected_features))
