@@ -6,14 +6,7 @@ import vf_classify
 from sklearn import metrics
 
 
-def balanced_error_rate(y_true, y_predict):
-    incorrect = (y_true != y_predict)
-    fp = np.sum(np.logical_and(y_predict, incorrect))
-    pred_negative = np.logical_not(y_predict)
-    fn = np.sum(np.logical_and(pred_negative, incorrect))
-    n_positive = np.sum(y_true)
-    n_negative = len(y_true) - n_positive
-    return 0.5 * (fn / n_positive + fp / n_negative)
+scorer_names = ("ber", "f1", "accuracy", "precision", "f1_weighted", "precision_weighted", "f_beta", "custom")
 
 
 class BinaryClassificationResult:
@@ -48,6 +41,16 @@ class MultiClassificationResult:
             result = BinaryClassificationResult(bin_y_true, bin_y_predict)
             results.append(result)
         self.results = results
+
+
+def balanced_error_rate(y_true, y_predict):
+    incorrect = (y_true != y_predict)
+    fp = np.sum(np.logical_and(y_predict, incorrect))
+    pred_negative = np.logical_not(y_predict)
+    fn = np.sum(np.logical_and(pred_negative, incorrect))
+    n_positive = np.sum(y_true)
+    n_negative = len(y_true) - n_positive
+    return 0.5 * (fn / n_positive + fp / n_negative)
 
 
 def to_bin_label(y, pos_label):
@@ -89,31 +92,19 @@ def custom_score(y_true, y_predict):
             non_shockable_score *= len(y_true) / n_non_shockable
         else:
             non_shockable_score = 0.0
-
-        """
-        shockable_idx = (y_true == vf_classify.SHOCKABLE)
-        n_shockable = np.sum(shockable_idx)
-        if n_shockable:
-            shockable_f1 = metrics.fbeta_score(y_true[shockable_idx], y_predict[shockable_idx], beta=0.8, pos_label=vf_classify.SHOCKABLE, average="binary")
-            shockable_f1 *= len(y_true) / n_shockable
-        else:
-            shockable_f1 = 0.0
-
-        intermediate_idx = (y_true == vf_classify.INTERMEDIATE)
-        n_intermediate = np.sum(intermediate_idx)
-        if n_intermediate:
-            intermidiate_f1 = metrics.fbeta_score(y_true[intermediate_idx], y_predict[intermediate_idx], beta=0.5, pos_label=vf_classify.INTERMEDIATE, average="binary")
-            intermidiate_f1 *= len(y_true) / n_intermediate
-        else:
-            intermidiate_f1 = 0.0
-
-        non_shockable_idx = (y_true == vf_classify.NON_SHOCKABLE)
-        n_non_shockable = np.sum(non_shockable_idx)
-        if n_non_shockable:
-            non_shockable_f1 = metrics.f1_score(y_true[non_shockable_idx], y_predict[non_shockable_idx], pos_label=vf_classify.NON_SHOCKABLE, average="binary")
-            non_shockable_f1 *= len(y_true) / n_non_shockable
-        else:
-            non_shockable_f1 = 0.0
-        """
         return np.mean([shockable_score * 0.95, intermidiate_score * 0.25, non_shockable_score * 0.99]) / (0.95 + 0.25 + 0.99)
     return 0.0
+
+
+def get_scorer(name):
+    # build scoring function
+    if name == "ber":  # BER-based scoring function
+        cv_scorer = metrics.make_scorer(balanced_error_rate, greater_is_better=False)
+    elif name == "f_beta":
+        cv_scorer = metrics.make_scorer(metrics.fbeta_score, beta=2, average="weighted")
+    elif name == "custom":  # our custom error function
+        cv_scorer = metrics.make_scorer(custom_score)
+    else:
+        cv_scorer = name
+    return cv_scorer
+

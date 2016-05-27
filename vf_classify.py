@@ -4,7 +4,7 @@ import numpy as np
 from sklearn import preprocessing
 from sklearn import ensemble
 from sklearn import metrics
-from vf_eval import *
+import vf_eval
 
 
 # initial classification to detect possibly shockable rhythm
@@ -26,6 +26,8 @@ RAPID_VT_RATE = 180
 
 # 0.2 mV is suggested by AHA
 COARSE_VF_THRESHOLD = 0.2
+
+estimator_names = ("logistic_regression", "random_forest", "adaboost", "gradient_boosting", "svc_linear", "svc_poly", "svc_rbf", "mlp1", "mlp2")
 
 
 def create_aha_labels(x_data, x_data_info):
@@ -71,7 +73,8 @@ def create_binary_labels(x_data_info):
 
 
 def exclude_rhythms(x_data, x_data_info, excluded_rhythms):
-    excluded_idx = np.array([i for i, info in enumerate(x_data_info) if info.rhythm in excluded_rhythms])
+    # "X" is used internally by us (in label correction file) to mark some broken samples to exclude from the test
+    excluded_idx = np.array([i for i, info in enumerate(x_data_info) if info.rhythm in excluded_rhythms or info.rhythm == "X"])
     x_data = np.delete(x_data, excluded_idx, axis=0)
     x_data_info = np.delete(x_data_info, excluded_idx, axis=0)
     return x_data, x_data_info
@@ -87,7 +90,7 @@ def get_balanced_sample_weights(y_data):
     return weights
 
 
-def create_estimator(estimator_name, class_weight):
+def create_estimator(estimator_name, class_weight, n_features):
     estimator = None
     param_grid = None
     support_class_weight = False
@@ -102,7 +105,9 @@ def create_estimator(estimator_name, class_weight):
     elif estimator_name == "random_forest":
         estimator = ensemble.RandomForestClassifier(class_weight=class_weight)
         param_grid = {
-            "n_estimators": list(range(10, 110, 10))
+            "n_estimators": list(range(10, 110, 10)),
+            "max_features": ("auto", 0.5, None)
+            # "max_features": np.arange(int(np.sqrt(n_features)), n_features, step=4)
         }
         support_class_weight = True
         # support_class_weight = False
@@ -110,8 +115,8 @@ def create_estimator(estimator_name, class_weight):
         import xgboost.sklearn as xgb
         estimator = xgb.XGBClassifier(learning_rate=0.1)
         param_grid = {
-            "n_estimators": list(range(150, 250, 10)),
-            "max_depth": list(range(3, 8))
+            # "n_estimators": list(range(150, 250, 10)),
+            # "max_depth": list(range(3, 8))
         }
     elif estimator_name == "adaboost":
         estimator = ensemble.AdaBoostClassifier()
@@ -119,17 +124,33 @@ def create_estimator(estimator_name, class_weight):
             "n_estimators": list(range(30, 150, 10)),
             "learning_rate": np.logspace(-1, 0, 2)
         }
-    elif estimator_name == "svc":
+    elif estimator_name.startswith("svc_"):
+        subtype = estimator_name[4:]
         from sklearn import svm
-        estimator = svm.SVC(shrinking=False,
-                            cache_size=2048,
-                            verbose=False,
-                            probability=True,
-                            class_weight=class_weight)
-        param_grid = {
-            "C": np.logspace(0, 1, 2),
-            "gamma": np.logspace(-2, -1, 2)
-        }
+        if subtype == "linear":  # linear SVC uses liblinear insteaed of libsvm internally, which is more efficient
+            param_grid = {
+                "C": np.logspace(-4, 1, 30)
+            }
+            estimator = svm.LinearSVC(dual=False,  # dual=False when n_samples > n_features according to the API doc.
+                                      class_weight=class_weight)
+        else:
+            estimator = svm.SVC(shrinking=False,
+                                cache_size=2048,
+                                verbose=False,
+                                probability=False,  # use True when predict_proba() is needed
+                                class_weight=class_weight)
+            if subtype == "rbf":
+                estimator.set_params(kernel="rbf")
+                param_grid = {
+                    "C": np.logspace(-2, 3, 10),
+                    "gamma": np.logspace(-2, -1, 2)
+                }
+            else:  # poly
+                estimator.set_params(kernel="poly")
+                param_grid = {
+                    "degree": [2],
+                    "C": np.logspace(-2, 3, 10)
+                }
         support_class_weight = True
     elif estimator_name == "mlp1" or estimator_name == "mlp2":  # multiple layer perceptron neural network
         from sknn import mlp
@@ -154,34 +175,3 @@ def create_estimator(estimator_name, class_weight):
         estimator = mlp.Classifier(layers=layers, batch_size=150)
 
     return estimator, param_grid, support_class_weight
-
-
-"""
-    # final classification based on AHA requirements
-    def aha_classifier(x_test, x_test_info, binary_y_predict):
-        aha_y_predict = np.zeros(len(x_test), dtype="int")
-        for i in range(len(x_test)):
-            # Check if this rhythm is one of VF, VT, or VFL (dangerous rhythms)
-            if binary_y_predict[i] == DANGEROUS_RHYTHM:
-                info = x_test_info[i]
-                # This rhythm can be VF, VFL, or VT, but we don't know
-                # TODO: we may use some simple features to distinguish them if needed
-                amplitude = info.amplitude
-                # perform QRS detection to calculate heart rate
-                # here we get the stored QRS detection result done previously for speed up.
-                beats = info.detected_beats
-                if beats:  # heart beats are detected
-                    # This can be VF (shockable), slow VT (intermediate), or other misclassified "safe" rhythms
-                    # FIXME: find a method to distinguish them
-                    if hr >= RAPID_VT_RATE:  # this is either rapid VT or VF (both are shockable, no need to distinguish them)
-                        y = SHOCKABLE
-                    else:  # this rhythm is slower than 180 BPM
-                        y = INTERMEDIATE
-                else:  # no QRS complex was found, this must be VF or asystole
-                    if amplitude >= COARSE_VF_THRESHOLD:
-                        y = SHOCKABLE
-                    else:
-                        y = INTERMEDIATE
-                aha_y_predict[i] = y
-        return aha_y_predict
-"""

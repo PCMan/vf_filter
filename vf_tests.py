@@ -3,13 +3,11 @@ import pyximport; pyximport.install()
 import numpy as np
 from sklearn import preprocessing
 from sklearn import cross_validation
-from sklearn import metrics
 from sklearn import grid_search
 from vf_features import load_features, feature_names
-from vf_eval import *
+import vf_eval
 import csv
 import argparse
-# from sklearn import feature_selection
 import vf_classify
 
 
@@ -34,14 +32,14 @@ def create_csv_fields(estimator_name, select_feature_names, label_encoder, param
 
 
 def output_binary_result(row, y_test, y_predict):
-    result = BinaryClassificationResult(y_test, y_predict)
+    result = vf_eval.BinaryClassificationResult(y_test, y_predict)
     row["Se[dangerous]"] = result.sensitivity
     row["Sp[dangerous]"] = result.specificity
     row["precision[dangerous]"] = result.precision
 
 
 def output_aha_result(row, x_test_idx, y_test, y_predict, label_encoder, x_rhythm_types):
-    results = MultiClassificationResult(y_test, y_predict, classes=vf_classify.aha_classes).results
+    results = vf_eval.MultiClassificationResult(y_test, y_predict, classes=vf_classify.aha_classes).results
     for class_name, result in zip(vf_classify.aha_classe_names, results):
         row["Se[{0}]".format(class_name)] = result.sensitivity
         row["Sp[{0}]".format(class_name)] = result.specificity
@@ -63,12 +61,12 @@ def output_aha_result(row, x_test_idx, y_test, y_predict, label_encoder, x_rhyth
                 target = vf_classify.INTERMEDIATE
             bin_y_test[rhythm_y_test == target] = 1
             bin_y_predict[rhythm_y_predict == target] = 1
-            result = BinaryClassificationResult(bin_y_test, bin_y_predict)
+            result = vf_eval.BinaryClassificationResult(bin_y_test, bin_y_predict)
             row["Se[{0}]".format(rhythm_name)] = result.sensitivity
         else:  # for non-shockable rhythms, report specificity (TNR)
             bin_y_test[rhythm_y_test == vf_classify.NON_SHOCKABLE] = 1
             bin_y_predict[rhythm_y_predict == vf_classify.NON_SHOCKABLE] = 1
-            result = BinaryClassificationResult(bin_y_test, bin_y_predict)
+            result = vf_eval.BinaryClassificationResult(bin_y_test, bin_y_predict)
             row["Sp[{0}]".format(rhythm_name)] = result.sensitivity
 
 
@@ -85,7 +83,6 @@ def output_feature_scores(row, estimator, selected_feature_names):
     if hasattr(estimator, "feature_importances_"):
         scores = estimator.feature_importances_
         # normalize the scores
-        # scores = preprocessing.normalize(scores, norm="l1")
         for i, score in enumerate(scores):
             name = selected_feature_names[i]
             row[name] = score
@@ -132,15 +129,14 @@ def main():
     # parse command line arguments
     parser = argparse.ArgumentParser()
     # known estimators
-    estimator_names = ("logistic_regression", "random_forest", "adaboost", "gradient_boosting", "svc", "mlp1", "mlp2")
-    scorer_names = ("ber", "f1", "accuracy", "precision", "f1_weighted", "precision_weighted", "f_beta", "custom")
-    parser.add_argument("-m", "--model", type=str, required=True, choices=estimator_names)
+
+    parser.add_argument("-m", "--model", type=str, required=True, choices=vf_classify.estimator_names)
     parser.add_argument("-i", "--input", type=str, required=True)
     parser.add_argument("-o", "--output", type=str, required=True)
     parser.add_argument("-e", "--error-log", type=str, help="filename of the error log")
     parser.add_argument("-j", "--jobs", type=int, default=-1)
     parser.add_argument("-t", "--iter", type=int, default=1)
-    parser.add_argument("-s", "--scorer", type=str, choices=scorer_names, default="f1_weighted")
+    parser.add_argument("-s", "--scorer", type=str, choices=vf_eval.scorer_names, default="f1_weighted")
     parser.add_argument("-c", "--cv-fold", type=int, default=5)  # 5 fold CV by default
     parser.add_argument("-p", "--test-percent", type=int, default=30)  # 30% test set size
     parser.add_argument("-b", "--balanced-weight", action="store_true")  # used balanced class weighting
@@ -164,15 +160,7 @@ def main():
         class_weight = "balanced"
 
     # build scoring function
-    if args.scorer == "ber":  # BER-based scoring function
-        cv_scorer = metrics.make_scorer(balanced_error_rate, greater_is_better=False)
-    elif args.scorer == "f_beta":
-        cv_scorer = metrics.make_scorer(metrics.fbeta_score, beta=2, average="weighted")
-    elif args.scorer == "custom":  # our custom error function
-        cv_scorer = metrics.make_scorer(custom_score)
-    else:
-        cv_scorer = args.scorer
-        # cv_scorer = metrics.make_scorer(metrics.fbeta_score, beta=10.0)
+    cv_scorer = vf_eval.get_scorer(args.scorer)
 
     # load features
     x_data, x_data_info = load_features(args.input)
@@ -183,15 +171,11 @@ def main():
         selected_feature_names = args.features
         x_data = x_data[:, selected_features]
     else:
-        selected_features = range(len(feature_names))
+        selected_features = list(range(len(feature_names)))
         selected_feature_names = feature_names
 
-    # "X" is used internally by us (in label correction file) to mark some broken samples to exclude from the test
-    excluded_rhythms = ["X"]
-    if args.exclude_rhythms:
-        excluded_rhythms.extend(args.exclude_rhythms)
-    # exclude samples with some rhythms from the test
-    x_data, x_data_info = vf_classify.exclude_rhythms(x_data, x_data_info, excluded_rhythms)
+    if args.exclude_rhythms:  # exclude samples with some rhythms from the test
+        x_data, x_data_info = vf_classify.exclude_rhythms(x_data, x_data_info, args.exclude_rhythms)
 
     # encode differnt types of rhythm names into numeric codes for stratified sampling later
     y_rhythm_names = [info.rhythm for info in x_data_info]
@@ -203,15 +187,13 @@ def main():
     aha_y_data = vf_classify.create_aha_labels(x_data, x_data_info)
 
     # build estimator to test
-    estimator, param_grid, support_class_weight = vf_classify.create_estimator(estimator_name, class_weight)
+    estimator, param_grid, support_class_weight = vf_classify.create_estimator(estimator_name, class_weight, len(selected_features))
 
     # prepare a matrix to store the error states of each sample during test iterations
     predict_results = None
     if args.error_log:  # output error log file
         # 2D table to store test results: initialize all fields with -1
         predict_results = np.full(shape=(len(x_data), n_test_iters), fill_value=-1, dtype=int)
-
-    # feature_selector = feature_selection.RFE(estimator, verbose=True)
 
     # also report the optimal parameters after tuning with CV to the csv file
     csv_fields = create_csv_fields(estimator_name, selected_feature_names, label_encoder, param_grid)  # generate field names for the output csv file
@@ -250,12 +232,9 @@ def main():
                     weight_arg: np.array(vf_classify.get_balanced_sample_weights(y_train))
                 }
 
-            # feature_selector.set_params(n_features_to_select=20)
-            # feature_selector_param_grid = {"estimator__{0}".format(key): val for key, val in param_grid.items()}
-            # feature_selector_param_grid["n_features_to_select"] = np.arange(13, len(feature_names), step=1)
             # find best parameters using grid search + cross validation
-            grid = grid_search.GridSearchCV(estimator, #feature_selector,  # here we give the grid search RFE feature selection
-                                            param_grid, #feature_selector_param_grid,
+            grid = grid_search.GridSearchCV(estimator,
+                                            param_grid,
                                             fit_params=fit_params,
                                             scoring=cv_scorer,
                                             n_jobs=n_jobs,
@@ -277,12 +256,6 @@ def main():
             if args.error_log:  # calculate error statistics for each sample
                 included_idx = np.array(x_test_idx)  # samples included in this test iteration
                 predict_results[included_idx, it - 1] = y_predict  # remember prediction results of all included samples
-
-            if args.scorer in ("f1_weighted", "f1"):
-                # calculate training error
-                y_predict_train = grid.predict(x_train)
-                training_score = grid.scorer_._score_func(y_train, y_predict_train, average="weighted")
-                print("\tTraining score:", training_score, "CV score:", grid.best_score_)
 
             # report the performance of final AHA classification
             output_aha_result(row, x_test_idx, y_test, y_predict, label_encoder, x_rhythm_types)
