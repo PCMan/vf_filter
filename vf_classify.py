@@ -102,7 +102,7 @@ def create_estimator(estimator_name, class_weight, n_features):
         from sklearn import linear_model
         estimator = linear_model.LogisticRegression(class_weight=class_weight)
         param_grid = {
-            "C": np.logspace(-2, 4, 20)
+            "C": np.logspace(-3, 4, 20)
         }
         support_class_weight = True
     elif estimator_name == "random_forest":
@@ -132,7 +132,7 @@ def create_estimator(estimator_name, class_weight, n_features):
         from sklearn import svm
         if subtype == "linear":  # linear SVC uses liblinear insteaed of libsvm internally, which is more efficient
             param_grid = {
-                "C": np.logspace(-4, 1, 30)
+                "C": np.logspace(-5, 2, 50),
             }
             estimator = svm.LinearSVC(dual=False,  # dual=False when n_samples > n_features according to the API doc.
                                       class_weight=class_weight)
@@ -145,8 +145,8 @@ def create_estimator(estimator_name, class_weight, n_features):
             if subtype == "rbf":
                 estimator.set_params(kernel="rbf")
                 param_grid = {
-                    "C": np.logspace(-2, 3, 10),
-                    "gamma": np.logspace(-2, -1, 4)
+                    "C": np.logspace(-2, 2, 20),
+                    "gamma": np.logspace(-3, -1, 4)
                 }
             else:  # poly
                 estimator.set_params(kernel="poly")

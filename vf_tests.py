@@ -22,9 +22,13 @@ def create_csv_fields(estimator_name, select_feature_names, label_encoder, param
         else:  # other non-shockable rhythms
             csv_fields.append("Sp[{0}]".format(class_name))
 
-    # feature scores, if applicable
     if estimator_name in ("random_forest", "adaboost"):
+        # feature scores, if applicable
         csv_fields.extend(select_feature_names)
+    elif estimator_name in ("logistic_regression", "svc_linear"):
+        # coefficients for regression, if applicable
+        for class_id in range(0, 3):
+            csv_fields.extend(["{0}[{1}]".format(feature, class_id) for feature in select_feature_names])
 
     # remember best parameters
     csv_fields.extend(sorted(param_grid.keys()))
@@ -87,14 +91,11 @@ def output_feature_scores(row, estimator, selected_feature_names):
             name = selected_feature_names[i]
             row[name] = score
     elif hasattr(estimator, "coef_"):
-        coef = estimator.coef_  # coefficients
+        coef = estimator.coef_  # coefficients for each class
         for class_id in range(0, 3):
-            print("class", class_id, "feature weights:")
             weights = coef[class_id, :]
-            sorted_indices = np.argsort(np.abs(weights))
-            for idx in reversed(sorted_indices):
-                print("\t", selected_feature_names[idx], weights[idx])
-            print("-" * 20)
+            for i, weight in enumerate(weights):
+                row["{0}[{1}]".format(selected_feature_names[i], class_id)] = weight
 
 
 def output_errors(log_filename, predict_results, x_data_info, aha_y_data):
@@ -148,9 +149,8 @@ def main():
     parser.add_argument("-s", "--scorer", type=str, choices=vf_eval.scorer_names, default="f1_weighted")
     parser.add_argument("-c", "--cv-fold", type=int, default=5)  # 5 fold CV by default
     parser.add_argument("-p", "--test-percent", type=int, default=30)  # 30% test set size
-    parser.add_argument("-b", "--balanced-weight", action="store_true")  # used balanced class weighting
+    parser.add_argument("-w", "--unbalanced-weight", action="store_true")  # avoid balanced class weighting
     parser.add_argument("-f", "--features", type=str, nargs="+", choices=feature_names)  # feature selection
-    parser.add_argument("-l", "--label-method", type=str, default="aha")
     parser.add_argument("-x", "--exclude-rhythms", type=str, nargs="+", default=["(ASYS"])  # exclude some rhythms from the test
     args = parser.parse_args()
     print(args)
@@ -164,9 +164,9 @@ def main():
         test_size = 0.3
     estimator_name = args.model
 
-    class_weight = None
-    if args.balanced_weight:
-        class_weight = "balanced"
+    class_weight = "balanced"
+    if args.unbalanced_weight:
+        class_weight = None
 
     # build scoring function
     cv_scorer = vf_eval.get_scorer(args.scorer)
@@ -235,7 +235,7 @@ def main():
 
             fit_params = None
             # try to balance class weighting
-            if args.balanced_weight and not support_class_weight:
+            if class_weight == "balanced" and not support_class_weight:
                 # perform sample weighting instead if the estimator does not support class weighting
                 weight_arg = "w" if estimator_name.startswith("mlp") else "sample_weight"
                 fit_params = {
