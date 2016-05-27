@@ -90,14 +90,15 @@ def output_feature_scores(row, estimator, selected_feature_names):
         for i, score in enumerate(scores):
             name = selected_feature_names[i]
             row[name] = score
-    elif hasattr(estimator, "coef_"):
+    else:
         try:
-            coef = estimator.coef_  # coefficients for each class
-            for class_id in range(0, 3):
-                weights = coef[class_id, :]
-                for i, weight in enumerate(weights):
-                    row["{0}[{1}]".format(selected_feature_names[i], class_id)] = weight
-        except ValueError:  # some estimators do not support coef_
+            if hasattr(estimator, "coef_"):
+                coef = estimator.coef_  # coefficients for each class
+                for class_id in range(0, 3):
+                    weights = coef[class_id, :]
+                    for i, weight in enumerate(weights):
+                        row["{0}[{1}]".format(selected_feature_names[i], class_id)] = weight
+        except ValueError:  # non-linear estimators do not support coef_
             pass
 
 
