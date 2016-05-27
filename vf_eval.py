@@ -68,9 +68,7 @@ def custom_score(y_true, y_predict):
         y_bin_predict = to_bin_label(y_predict, vf_classify.SHOCKABLE)
         n_shockable = np.sum(y_bin_true)
         if n_shockable:
-            # shockable_score = metrics.fbeta_score(y_bin_true, y_bin_predict, beta=0.8, average="binary")
             shockable_score = metrics.recall_score(y_bin_true, y_bin_predict, average="binary")
-            # shockable_score *= len(y_true) / n_shockable
         else:
             shockable_score = 0.0
 
@@ -79,7 +77,6 @@ def custom_score(y_true, y_predict):
         n_intermediate = np.sum(y_bin_true)
         if n_intermediate:
             intermidiate_score = metrics.fbeta_score(y_bin_true, y_bin_predict, beta=2, average="binary")
-            # intermidiate_score *= len(y_true) / n_intermediate
         else:
             intermidiate_score = 0.0
 
@@ -87,9 +84,7 @@ def custom_score(y_true, y_predict):
         y_bin_predict = to_bin_label(y_predict, vf_classify.NON_SHOCKABLE)
         n_non_shockable = np.sum(y_bin_true)
         if n_non_shockable:
-            # non_shockable_score = metrics.fbeta_score(y_bin_true, y_bin_predict, beta=0.8, average="binary")
             non_shockable_score = metrics.recall_score(y_bin_true, y_bin_predict, average="binary")
-            # non_shockable_score *= len(y_true) / n_non_shockable
         else:
             non_shockable_score = 0.0
         return np.mean([shockable_score * 0.95, intermidiate_score * 0.25, non_shockable_score * 0.99]) / (0.95 + 0.25 + 0.99)
