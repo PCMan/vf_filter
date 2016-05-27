@@ -146,7 +146,7 @@ def create_estimator(estimator_name, class_weight, n_features):
                 estimator.set_params(kernel="rbf")
                 param_grid = {
                     "C": np.logspace(-2, 2, 20),
-                    "gamma": np.logspace(-3, -1, 4)
+                    "gamma": np.logspace(-2, -1, 3)
                 }
             else:  # poly
                 estimator.set_params(kernel="poly")
