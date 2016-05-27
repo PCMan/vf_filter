@@ -109,7 +109,7 @@ def create_estimator(estimator_name, class_weight, n_features):
         estimator = ensemble.RandomForestClassifier(class_weight=class_weight)
         param_grid = {
             "n_estimators": list(range(10, 110, 10)),
-            "max_features": ("auto", 0.5, None)
+            "max_features": ("auto", 0.5, 0.8, None)
             # "max_features": np.arange(int(np.sqrt(n_features)), n_features, step=4)
         }
         support_class_weight = True
