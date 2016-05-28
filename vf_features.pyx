@@ -332,14 +332,12 @@ cdef double vf_leak(np.ndarray[double, ndim=1] samples, np.ndarray[double comple
     # http://cinc.mit.edu/archives/2002/pdf/213.pdf
     cdef int peak_freq_idx = np.argmax(fft)
     cdef double peak_freq = fft_freq[peak_freq_idx]  # From Computers in Cardiology 2002;29:213−216.
-
     cdef double cycle
     if peak_freq != 0:
         cycle = (1.0 / peak_freq)  # in terms of samples
     else:
         cycle = len(samples)
     cdef double half_cycle = int(cycle/2)
-
     cdef np.ndarray[double, ndim=1] original = samples[half_cycle:]
     cdef np.ndarray[double, ndim=1] shifted = samples[:-half_cycle]
     return np.sum(np.abs(original + shifted)) / np.sum(np.abs(original) + np.abs(shifted))
@@ -502,10 +500,9 @@ cdef emd_features(np.ndarray[double, ndim=1] samples, int sampling_rate, list im
     if sampling_rate != 250:
         samples = signal.resample(samples, int((len(samples) / sampling_rate) * 250))
     # normalize to 0 - 1
-    samples -= np.min(samples)
-    samples /= np.max(samples)
+    cdef np.ndarray[double, ndim=1] normalized = (samples - np.min(samples)) / np.max(samples)
     # normalize to 0 - 2^12 (convert to 12 bit resolution)
-    cdef np.ndarray[np.uint16_t, ndim=1] emd_samples = (samples * (2 ** 12)).astype("uint16")
+    cdef np.ndarray[np.uint16_t, ndim=1] emd_samples = (normalized * (2 ** 12)).astype("uint16")
     # perform EMD
     imfs = emd(emd_samples, max_modes=max(imf_modes))
     cdef int imf_mode
@@ -554,14 +551,16 @@ cdef tuple beat_statistics(list beats):
 
 # extract features from raw sample points of the original ECG signal
 # Before calling this function, the samples should have ADC zero substracted and converted to mV.
-cpdef extract_features(np.ndarray[double, ndim=1] samples, int sampling_rate, set features_to_extract=feature_names_set):
+cpdef extract_features(np.ndarray[double, ndim=1] src_samples, int sampling_rate, set features_to_extract=feature_names_set):
     result = array("d")
 
     # Pre-processing:
     # Reference: https://homepages.fhv.at/ku/karl/VF/filtering.m
 
     # perform mean subtraction
-    samples = samples - np.mean(samples)
+    samples = src_samples - np.mean(src_samples)
+
+    samples = (samples - np.min(samples)) / (np.max(samples) - np.min(samples))
 
     # 5-order moving average
     samples = moving_average(samples, order=5)
@@ -574,15 +573,8 @@ cpdef extract_features(np.ndarray[double, ndim=1] samples, int sampling_rate, se
 
     cdef int n_samples = len(samples)
 
-    # calculate the raw amplitude of the signals
-    cdef double amplitude = get_amplitude(samples, sampling_rate)
-
     # perform QRS beat detection as part of the feature extraction process
     cdef list beats = qrs_detect(samples, sampling_rate)
-
-    # We move the normalization step to the end of pre-processing since we need amplitudes of the original signals.
-    # normalize the input ECG sequence
-    samples = (samples - np.min(samples)) / (np.max(samples) - np.min(samples))
 
     # Time domain/morphology features
     # -------------------------------------------------
@@ -643,7 +635,7 @@ cpdef extract_features(np.ndarray[double, ndim=1] samples, int sampling_rate, se
         fft = np.fft.fft(samples * signal.hamming(n_samples))
         fft_freq = np.fft.fftfreq(n_samples)
         # We only need the left half of the FFT result (with frequency > 0)
-        n_fft = np.ceil(n_samples / 2)
+        n_fft = <int>(np.ceil(n_samples / 2))
         fft = fft[0:n_fft]
         fft_freq = fft_freq[0:n_fft]
 
@@ -705,6 +697,8 @@ cpdef extract_features(np.ndarray[double, ndim=1] samples, int sampling_rate, se
     result.append(count3)
 
     # amplitude of the raw signals
+    # calculate the raw amplitude of the signals
+    cdef double amplitude = get_amplitude(src_samples, sampling_rate)
     result.append(amplitude if "Amplitude" in features_to_extract else 0.0)
 
     cdef double imf1_lz = 0.0, imf5_lz = 0.0

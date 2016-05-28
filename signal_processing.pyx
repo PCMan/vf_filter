@@ -87,6 +87,16 @@ cpdef bytearray array_to_binary_byte_string(object data, int bits_per_element, b
 # Find the max peak-to-peak amplitude in the samples
 # The amplitudes of samples should be converted to "mV" prior to calling this function.
 cpdef double get_amplitude(np.ndarray[double, ndim=1] samples, int sampling_rate, plot=None):
+    # 5-order moving average
+    samples = moving_average(samples, order=5)
+
+    # low pass filter for drift supression
+    samples = drift_supression(samples, 1, sampling_rate)
+
+    # band pass filter
+    samples = butter_lowpass_filter(samples, 30, sampling_rate)
+
+    # find all local maximum and minimum
     cdef double max_amplitude = 0.0
     cdef int half_peak_width = int(np.round(0.05 * sampling_rate))
     cdef np.ndarray[np.int_t, ndim=1] peak_indices = signal.argrelmax(samples, order=half_peak_width)[0]
