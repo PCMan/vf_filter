@@ -543,9 +543,10 @@ cdef tuple beat_statistics(list beats):
         rr_average = np.mean(rr_intervals)
         rr_std = np.std(rr_intervals)
 
-    if len(beats):
-        unknown_beats /= len(beats)
-        vpc_beats /= len(beats)
+    if len(beats) > 1:
+        # the first beat is often wrongly classified as "Q" type, so let's skip it.
+        unknown_beats /= (len(beats) - 1)
+        vpc_beats /= (len(beats) - 1)
     return rr_average, rr_std, unknown_beats, vpc_beats
 
 
