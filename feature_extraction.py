@@ -97,9 +97,9 @@ class Server:
 
     # called by slaves to get next job to compute
     def next_segment(self):
+        idx = -1
+        segment = None
         if not self.finish_read:
-            idx = -1
-            segment = None
             self.lock.acquire()  # prevent concurrent calls to the underlying iterator/generator
             try:
                 idx, segment = next(self.segment_iter)
