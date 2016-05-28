@@ -9,6 +9,7 @@ import scipy.signal as signal
 import pickle
 import argparse
 import sys
+import threading
 
 
 def extract_features(idx, segment, resample_rate, update_features, verbose):
@@ -92,20 +93,24 @@ class Server:
         self.finish_read = False
         self.results = []
         self.verbose = args.verbose
+        self.lock = threading.Lock()
 
     # called by slaves to get next job to compute
     def next_segment(self):
         if not self.finish_read:
+            idx = -1
+            segment = None
+            self.lock.acquire()  # prevent concurrent calls to the underlying iterator/generator
             try:
                 idx, segment = next(self.segment_iter)
                 self.n_all_segments += 1
                 if self.verbose:
                     info = segment.info
                     print(idx, info.record_name, info.begin_time)
-                return idx, segment
-            except StopIteration:
+            except StopIteration:  # no more data to compute
                 self.finish_read = True  # all data are fetched
-        return -1, None  # no more data to compute
+            self.lock.release()
+        return idx, segment
 
     def add_results(self, results):  # receive results from slaves
         self.results.extend(results)
