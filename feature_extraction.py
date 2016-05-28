@@ -86,12 +86,12 @@ def output_results(output_file, update_features, results):
 
 # distributed computing server
 class Server:
-    def __init__(self, daemon, args):
-        self.daemon = daemon
+    def __init__(self, args):
         self.segment_iter = iter(load_all_segments(args))
         self.n_all_segments = 0
         self.finish_read = False
         self.results = []
+        self.verbose = args.verbose
 
     # called by slaves to get next job to compute
     def next_segment(self):
@@ -99,7 +99,10 @@ class Server:
             try:
                 idx, segment = next(self.segment_iter)
                 self.n_all_segments += 1
-                return idx, segment 
+                if self.verbose:
+                    info = segment.info
+                    print(idx, info.record_name, info.begin_time)
+                return idx, segment
             except StopIteration:
                 self.finish_read = True  # all data are fetched
         return -1, None  # no more data to compute
@@ -109,8 +112,7 @@ class Server:
         print("got results", self.finish_read, len(self.results), self.n_all_segments)
         if self.finish_read and len(self.results) == self.n_all_segments:
             # all computation are done, stop the server
-            self.daemon.shutdown()
-            del self.daemon  # release the reference to daemon object
+            self._pyroDaemon.shutdown()
 
 
 # this is a generator function
@@ -158,8 +160,10 @@ def main():
         import Pyro4
         Pyro4.config.SERIALIZERS_ACCEPTED = {"pickle"}
         Pyro4.config.SERIALIZER = "pickle"
-        pyro_daemon = Pyro4.Daemon(port=args.listen_port)
-        server = Server(pyro_daemon, args)
+        import socket
+        host_ip = socket.gethostbyname(socket.gethostname())
+        pyro_daemon = Pyro4.Daemon(host=host_ip, port=args.listen_port)
+        server = Server(args)
         uri = pyro_daemon.register(server)
         print("Launch server at", uri)
         pyro_daemon.requestLoop()  # blocked until all data are processed
