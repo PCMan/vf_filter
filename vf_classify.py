@@ -115,11 +115,20 @@ def create_estimator(estimator_name, class_weight, n_features):
         support_class_weight = True
         # support_class_weight = False
     elif estimator_name == "gradient_boosting":
+        """
         import xgboost.sklearn as xgb
         estimator = xgb.XGBClassifier(learning_rate=0.1)
         param_grid = {
             # "n_estimators": list(range(150, 250, 10)),
             # "max_depth": list(range(3, 8))
+        }
+        """
+        # for some unknown reason, XGBoost does not perform well on my machine and hangs sometimes
+        # fallback to use the less efficient implementation in sklearn.
+        estimator = ensemble.GradientBoostingClassifier(learning_rate=0.1)
+        param_grid = {
+            "n_estimators": list(range(150, 250, 10)),
+            "max_depth": list(range(3, 8))
         }
     elif estimator_name == "adaboost":
         estimator = ensemble.AdaBoostClassifier()

@@ -24,7 +24,7 @@ case $HOST in
 "csbb06")
     models="gradient_boosting"
     # xgboost already uses all available CPU threads so let's avoid multi-processing here.
-    n_jobs=1
+    # n_jobs=1
 	;;
 #"csbb23")
 #    models="mlp2"
