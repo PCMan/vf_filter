@@ -574,7 +574,8 @@ cpdef extract_features(np.ndarray[double, ndim=1] src_samples, int sampling_rate
     cdef int n_samples = len(samples)
 
     # perform QRS beat detection as part of the feature extraction process
-    cdef list beats = qrs_detect(samples, sampling_rate)
+    # here we pass the raw signal samples to the QRS detector since it has built-in bandpass filtering.
+    cdef list beats = qrs_detect(src_samples, sampling_rate)
 
     # Time domain/morphology features
     # -------------------------------------------------
