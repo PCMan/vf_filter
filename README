@@ -1,0 +1,12 @@
+This is a system used to detect ventricular fibrillation and 
+ventricular tachycardia aming for used with AED.
+
+Dependencies:
+    python 3
+    scipy
+    numpy
+    pyro4
+    joblib
+    sklearn
+    cython
+    matplotlib
