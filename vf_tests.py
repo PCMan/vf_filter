@@ -22,7 +22,7 @@ def create_csv_fields(estimator_name, select_feature_names, label_encoder, param
         else:  # other non-shockable rhythms
             csv_fields.append("Sp[{0}]".format(class_name))
 
-    if estimator_name in ("random_forest", "adaboost"):
+    if estimator_name in ("random_forest", "adaboost", "gradient_boosting"):
         # feature scores, if applicable
         csv_fields.extend(select_feature_names)
     elif estimator_name in ("logistic_regression", "svc_linear"):
