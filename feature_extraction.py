@@ -94,6 +94,10 @@ class Server:
         self.results = []
         self.verbose = args.verbose
         self.lock = threading.Lock()
+        self.args = args
+
+    def get_args(self):
+        return self.args
 
     # called by slaves to get next job to compute
     def next_segment(self):
@@ -121,7 +125,7 @@ class Server:
 
 
 # this is a generator function
-def load_all_segments_from_server(master_proxy, args):
+def load_all_segments_from_server(master_proxy):
     while True:
         # get next segment to compute from the server
         idx, segment = master_proxy.next_segment()
@@ -159,7 +163,8 @@ def main():
         Pyro4.config.SERIALIZERS_ACCEPTED = {"pickle"}
         Pyro4.config.SERIALIZER = "pickle"
         master_proxy = Pyro4.Proxy(args.master_uri)  # connect to the remote server object
-        results = parallel_extract_features(args, load_all_segments_from_server(master_proxy, args))
+        server_args = master_proxy.get_args()
+        results = parallel_extract_features(server_args, load_all_segments_from_server(master_proxy))
         master_proxy.add_results(results)  # send the results to the master
     elif args.listen_port:  # if we're launching a master, create the server object
         import Pyro4

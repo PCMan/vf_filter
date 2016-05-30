@@ -5,6 +5,8 @@ import vf_data
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
+import signal_processing
+from scipy import signal
 
 
 def main():
@@ -33,13 +35,13 @@ def main():
     samples = record.signals[args.begin:(args.begin + args.duration * int(record.sampling_rate))]
 
     # trend removal (drift suppression)
-    samples = vf_features.drift_supression(samples, 1, record.sampling_rate)
+    samples = signal_processing.drift_supression(samples, 1, record.sampling_rate)
 
     # smoothing
-    samples = vf_features.moving_average(samples)
+    samples = signal_processing.moving_average(samples)
 
     # plot the signals
-    fig, axes = plt.subplots(2)
+    fig, axes = plt.subplots(4)
 
     ax = axes[0]
     ax.hlines(np.arange(-2, 3, step=0.5), xmin=0, xmax=len(samples), color="r")
@@ -47,6 +49,31 @@ def main():
 
     amplitude = vf_features.get_amplitude(samples, record.sampling_rate, plot=ax)
     print("amplitude:", amplitude)
+
+    ax = axes[1]
+    n_samples = len(samples)
+    fft = np.fft.fft(samples * signal.hamming(n_samples))
+    fft_freq = np.fft.fftfreq(n_samples)
+    # We only need the left half of the FFT result (with frequency > 0)
+    n_fft = int(np.ceil(n_samples / 2))
+    fft = fft[0:n_fft]
+    fft_freq = fft_freq[0:n_fft]
+    ax.plot(fft_freq, np.abs(fft))
+
+    # log signal
+    ax = axes[2]
+    log_samples = np.log(samples - np.min(samples) + 0.1)# + np.finfo("float64").eps)
+    ax.plot(log_samples, color="k")
+    
+    ax = axes[3]
+    n_samples = len(log_samples)
+    fft = np.fft.fft(log_samples * signal.hamming(n_samples))
+    fft_freq = np.fft.fftfreq(n_samples)
+    # We only need the left half of the FFT result (with frequency > 0)
+    n_fft = int(np.ceil(n_samples / 2))
+    fft = fft[0:n_fft]
+    fft_freq = fft_freq[0:n_fft]
+    ax.plot(fft_freq, np.abs(fft))
 
     plt.show()
 
