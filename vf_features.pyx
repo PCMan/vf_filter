@@ -506,16 +506,21 @@ cdef emd_features(np.ndarray[double, ndim=1] samples, int sampling_rate, list im
     # perform EMD
     imfs = emd(emd_samples, max_modes=max(imf_modes))
     cdef int imf_mode
-    cdef np.ndarray[np.uint16_t, ndim=1] imf
+    # cdef np.ndarray[np.uint16_t, ndim=1] imf
+    cdef np.ndarray[double, ndim=1] imf
     cdef bytearray bin_imf
     cdef bint little_endian
     for imf_mode in imf_modes:
         # IMF1_LZ: LZ complexity of EMD IMF
+        imf = imfs[imf_mode - 1]
+        imf_lz.append(complexity_measure(imf))
+        """
         imf = imfs[imf_mode - 1].astype("uint16")
         # determine byte_order
         little_endian = True if sys.byteorder == "little" else False
         bin_imf = array_to_binary_byte_string(array("H", imf), 12, little_endian)  # H means unsigned short int.
         imf_lz.append(lempel_ziv_complexity(bin_imf))
+        """
     return imf_lz
 
 
