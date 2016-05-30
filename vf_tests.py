@@ -293,6 +293,7 @@ def main():
             col = [row[field] for row in rows]
             avg[field] = np.mean(col)
         writer.writerow(avg)
+        print("\n".join(["\t{0} = {1}".format(field, avg.get(field, 0.0)) for field in csv_fields[1:]]))
 
         # log prediction errors of each sample during the test iterations in a csv file.
         if args.error_log:

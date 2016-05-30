@@ -6,7 +6,7 @@ import vf_classify
 from sklearn import metrics
 
 
-scorer_names = ("ber", "f1", "accuracy", "precision", "f1_weighted", "precision_weighted", "f_beta", "custom")
+scorer_names = ("ber", "f1", "accuracy", "precision", "f1_weighted", "precision_weighted", "f_beta", "max_recall", "custom")
 
 
 class BinaryClassificationResult:
@@ -87,8 +87,20 @@ def custom_score(y_true, y_predict):
             non_shockable_score = metrics.recall_score(y_bin_true, y_bin_predict, average="binary")
         else:
             non_shockable_score = 0.0
-        return np.mean([shockable_score * 0.95, intermidiate_score * 0.25, non_shockable_score * 0.99]) / (0.95 + 0.25 + 0.99)
+        # return np.mean([shockable_score * 0.95, intermidiate_score * 0.25, non_shockable_score * 0.99]) / (0.95 + 0.25 + 0.99)
+        return shockable_score
     return 0.0
+
+
+def max_recall_score(y_true, y_predict):
+    class_counts = np.bincount(y_true)
+    if len(class_counts) == 2:  # binary classification
+        y_bin_true = to_bin_label(y_true, vf_classify.DANGEROUS_RHYTHM)
+        y_bin_predict = to_bin_label(y_predict, vf_classify.DANGEROUS_RHYTHM)
+    elif len(class_counts) == 3:  # AHA classification
+        y_bin_true = to_bin_label(y_true, vf_classify.SHOCKABLE)
+        y_bin_predict = to_bin_label(y_predict, vf_classify.SHOCKABLE)
+    return metrics.recall_score(y_bin_true, y_bin_predict, average="binary")
 
 
 def get_scorer(name):
@@ -99,6 +111,8 @@ def get_scorer(name):
         cv_scorer = metrics.make_scorer(metrics.fbeta_score, beta=2, average="weighted")
     elif name == "custom":  # our custom error function
         cv_scorer = metrics.make_scorer(custom_score)
+    elif name == "max_recall":  # only recall of shockable class
+        cv_scorer = metrics.make_scorer(max_recall_score)
     else:
         cv_scorer = name
     return cv_scorer
