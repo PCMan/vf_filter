@@ -34,13 +34,15 @@ feature_names = (
     "Count3",           # count 3
     "Amplitude",        # amplitude of the signals
     "IMF1_LZ",          # LZ complexity of EMD IMF1
+    "IMF2_LZ",          # LZ complexity of EMD IMF2
+    "IMF3_LZ",          # LZ complexity of EMD IMF3
+    "IMF4_LZ",          # LZ complexity of EMD IMF4
     "IMF5_LZ",          # LZ complexity of EMD IMF5
     "RR",               # average RR interval (0 if no QRS is detected)
     "RR_Std",           # standard deviation of RR (0 if no QRS is detected)
     "RR_CV",            # standard deviation of RR / mean RR (0 if no QRS is detected)
     "UR",               # unknown beats/all beats (0 if no QRS is detected)
     "VR",               # VPC beats/all beats (0 if no QRS is detected)
-    # "SpecLZ",    # LZ complexity of spectrum
 )
 
 
@@ -502,7 +504,8 @@ cdef tuple auxiliary_counts(np.ndarray[double, ndim=1] samples, int sampling_rat
 cdef extern double imf_lempel_ziv_complexity(const double* imf, int length)
 
 cdef emd_features(np.ndarray[double, ndim=1] samples, int sampling_rate, list imf_modes):
-    imf_lz = array("d")
+    cdef int max_mode = max(imf_modes)
+    imf_lz = array("d", [0.0] * max_mode)
     # resample to 250 Hz
     if sampling_rate != 250:
         samples = signal.resample(samples, int((len(samples) / sampling_rate) * 250))
@@ -511,7 +514,7 @@ cdef emd_features(np.ndarray[double, ndim=1] samples, int sampling_rate, list im
     # normalize to 0 - 2^12 (convert to 12 bit resolution)
     cdef np.ndarray[np.uint16_t, ndim=1] emd_samples = (normalized * (2 ** 12)).astype("uint16")
     # perform EMD
-    imfs = emd(emd_samples, max_modes=max(imf_modes))
+    imfs = emd(emd_samples, max_modes=max_mode)
     cdef int imf_mode
     cdef np.ndarray[double, ndim=1] imf
     for imf_mode in imf_modes:
@@ -519,7 +522,7 @@ cdef emd_features(np.ndarray[double, ndim=1] samples, int sampling_rate, list im
         imf = imfs[imf_mode - 1]
         # References: passing numpy data pointer to C
         # https://github.com/cython/cython/wiki/tutorials-NumpyPointerToC
-        imf_lz.append(imf_lempel_ziv_complexity(&imf[0], len(imf)))
+        imf_lz[imf_mode - 1] = imf_lempel_ziv_complexity(&imf[0], len(imf))
     return imf_lz
 
 
@@ -707,21 +710,17 @@ cpdef extract_features(np.ndarray[double, ndim=1] src_samples, int sampling_rate
     cdef double amplitude = get_amplitude(src_samples, sampling_rate)
     result.append(amplitude if "Amplitude" in features_to_extract else 0.0)
 
-    cdef double imf1_lz = 0.0, imf5_lz = 0.0
-    cdef bytearray bin_imf
     # Empirical mode decomposition (EMD)
-    if features_to_extract & {"IMF1_LZ", "IMF5_LZ"}:
-        # FIXME: allow only update one IMF mode
-        imf_modes = [1, 5]
-        imf_lz = emd_features(samples, sampling_rate, imf_modes)
-        # IMF1_LZ, LZ complexity of EMD IMF1
-        if "IMF1_LZ" in features_to_extract:
-            imf1_lz = imf_lz[0]
-        # IMF5_LZ, LZ complexity of EMD IMF5
-        if "IMF5_LZ" in features_to_extract:
-            imf5_lz = imf_lz[1]
-    result.append(imf1_lz)
-    result.append(imf5_lz)
+    cdef set imf_feature_names = set(["IMF{0}_LZ".format(mode) for mode in range(1, 6)])
+    cdef set imf_selected = features_to_extract & imf_feature_names
+    cdef int mode
+    if imf_selected:
+        # allow only update some IMF modes
+        modes_to_update = [int(name[3]) for name in imf_selected]
+        imf_lz = emd_features(samples, sampling_rate, modes_to_update)
+        result.extend(imf_lz)
+    else:
+        result.extend([0.0] * 5)
 
     cdef double rr_avg, rr_std, unknwon_ratio, vpc_ratio, rr_cv
     (rr_avg, rr_std, unknwon_ratio, vpc_ratio) = beat_statistics(beats)
