@@ -2,7 +2,7 @@
 def make_ext(modname, pyxfilename):
     from distutils.extension import Extension
     return Extension(name=modname,
-                     extra_compile_args=["-Wimplicit-function-declaration"],
+                     extra_compile_args=["-Wimplicit-function-declaration", "-O3"],
                      sources=[pyxfilename,
                      "osea20-gcc/analbeat.c",
                      "osea20-gcc/bdac.c",

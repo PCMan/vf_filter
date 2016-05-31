@@ -429,6 +429,9 @@ cdef double sample_entropy(np.ndarray[double, ndim=1] samples):
     return spen
 
 
+# defined in vf_features.c
+cdef extern double lempel_ziv_complexity(const np.uint8_t* binary_sequence, int length)
+
 # Implement the algorithm described in the paper:
 # Xu-Sheng Zhang et al. 1999. Detecting Ventricular Tachycardia and Fibrillation by Complexity Measure
 cdef double complexity_measure(np.ndarray[double, ndim=1] samples):
@@ -451,9 +454,10 @@ cdef double complexity_measure(np.ndarray[double, ndim=1] samples):
         threshold = 0.2 * neg_peak
 
     # make the samples a binary string S based on the threshold
-    cdef bint b
-    bin_str = bytearray([1 if b else 0 for b in (samples > threshold)])
-    return lempel_ziv_complexity(bin_str)
+    # https://cython.readthedocs.io/en/latest/src/tutorial/numpy.html
+    # Passing bool numpy arrays to C is not supported by Cython at the moment, so cast it to uint8.
+    cdef np.ndarray[np.uint8_t, ndim=1, cast=True] bin_str = (samples > threshold)
+    return lempel_ziv_complexity(&bin_str[0], len(bin_str))
 
 
 # Bandpass Filter and Auxiliary Counts (count1, 2, 3)
@@ -494,6 +498,9 @@ cdef tuple auxiliary_counts(np.ndarray[double, ndim=1] samples, int sampling_rat
     return (count1, count2, count3)
 
 
+# defined in vf_features.c
+cdef extern double imf_lempel_ziv_complexity(const double* imf, int length)
+
 cdef emd_features(np.ndarray[double, ndim=1] samples, int sampling_rate, list imf_modes):
     imf_lz = array("d")
     # resample to 250 Hz
@@ -506,16 +513,13 @@ cdef emd_features(np.ndarray[double, ndim=1] samples, int sampling_rate, list im
     # perform EMD
     imfs = emd(emd_samples, max_modes=max(imf_modes))
     cdef int imf_mode
-    cdef np.ndarray[np.uint16_t, ndim=1] imf
-    cdef bytearray bin_imf
-    cdef bint little_endian
+    cdef np.ndarray[double, ndim=1] imf
     for imf_mode in imf_modes:
         # IMF1_LZ: LZ complexity of EMD IMF
-        imf = imfs[imf_mode - 1].astype("uint16")
-        # determine byte_order
-        little_endian = True if sys.byteorder == "little" else False
-        bin_imf = array_to_binary_byte_string(array("H", imf), 12, little_endian)  # H means unsigned short int.
-        imf_lz.append(lempel_ziv_complexity(bin_imf))
+        imf = imfs[imf_mode - 1]
+        # References: passing numpy data pointer to C
+        # https://github.com/cython/cython/wiki/tutorials-NumpyPointerToC
+        imf_lz.append(imf_lempel_ziv_complexity(&imf[0], len(imf)))
     return imf_lz
 
 

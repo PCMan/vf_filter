@@ -3,5 +3,7 @@ def make_ext(modname, pyxfilename):
     from distutils.extension import Extension
     return Extension(name=modname,
                      extra_compile_args=["-Wimplicit-function-declaration", "-O3"],
-                     sources=[pyxfilename],
-                     libraries=["wfdb"])
+                     sources=[pyxfilename,
+                     "vf_features.c"
+                     ],
+                     libraries=["m"])
