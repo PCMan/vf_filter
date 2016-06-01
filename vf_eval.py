@@ -6,7 +6,9 @@ import vf_classify
 from sklearn import metrics
 
 
-scorer_names = ("ber", "f1", "accuracy", "precision", "f1_weighted", "precision_weighted", "f_beta", "max_recall", "custom")
+scorer_names = ("ber", "f1", "accuracy", "precision", "f1_weighted",
+                "precision_weighted", "f_beta", "max_recall", "custom",
+                "f1_macro", "f1_binary")
 
 
 class BinaryClassificationResult:
@@ -103,10 +105,23 @@ def max_recall_score(y_true, y_predict):
     return metrics.recall_score(y_bin_true, y_bin_predict, average="binary")
 
 
+# treat the multi-class problem as if it's binary classification, and only care about shock/non-shock
+def f1_binary_score(y_true, y_predict):
+    class_counts = np.bincount(y_true)
+    if len(class_counts) == 3:  # AHA classification: make it a shock/non-shock binary problem
+        y_true = to_bin_label(y_true, vf_classify.SHOCKABLE)
+        y_predict = to_bin_label(y_predict, vf_classify.SHOCKABLE)
+    return metrics.f1_score(y_true, y_predict, average="binary")
+
+
 def get_scorer(name):
     # build scoring function
     if name == "ber":  # BER-based scoring function
         cv_scorer = metrics.make_scorer(balanced_error_rate, greater_is_better=False)
+    elif name == "f1_macro":
+        cv_scorer = metrics.make_scorer(metrics.f1_score, average="macro")
+    elif name == "f1_binary":
+        cv_scorer = metrics.make_scorer(f1_binary_score)
     elif name == "f_beta":
         cv_scorer = metrics.make_scorer(metrics.fbeta_score, beta=2, average="weighted")
     elif name == "custom":  # our custom error function

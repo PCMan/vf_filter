@@ -93,7 +93,7 @@ def get_balanced_sample_weights(y_data):
     return weights
 
 
-def create_estimator(estimator_name, class_weight, n_features):
+def create_estimator(estimator_name, class_weight):
     estimator = None
     param_grid = None
     support_class_weight = False

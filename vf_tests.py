@@ -4,6 +4,7 @@ import numpy as np
 from sklearn import preprocessing
 from sklearn import cross_validation
 from sklearn import grid_search
+from sklearn import feature_selection
 from vf_features import load_features, feature_names
 import vf_eval
 import csv
@@ -142,8 +143,6 @@ def output_errors(log_filename, predict_results, x_data_info, aha_y_data):
 def main():
     # parse command line arguments
     parser = argparse.ArgumentParser()
-    # known estimators
-
     parser.add_argument("-m", "--model", type=str, required=True, choices=vf_classify.estimator_names)
     parser.add_argument("-i", "--input", type=str, required=True)
     parser.add_argument("-o", "--output", type=str, required=True)
@@ -156,6 +155,7 @@ def main():
     parser.add_argument("-w", "--unbalanced-weight", action="store_true")  # avoid balanced class weighting
     parser.add_argument("-f", "--features", type=str, nargs="+", choices=feature_names)  # feature selection
     parser.add_argument("-x", "--exclude-rhythms", type=str, nargs="+", default=["(ASYS"])  # exclude some rhythms from the test
+    parser.add_argument("-r", "--rfe_iters", type=int, default=None)  # recursive feature elimination
     args = parser.parse_args()
     print(args)
 
@@ -201,7 +201,7 @@ def main():
     x_rhythm_types = label_encoder.fit_transform(y_rhythm_names)
 
     # build estimator to test
-    estimator, param_grid, support_class_weight = vf_classify.create_estimator(estimator_name, class_weight, len(selected_features))
+    estimator, param_grid, support_class_weight = vf_classify.create_estimator(estimator_name, class_weight)
 
     # prepare a matrix to store the error states of each sample during test iterations
     predict_results = None
@@ -254,18 +254,49 @@ def main():
                                             n_jobs=n_jobs,
                                             cv=n_cv_folds,
                                             verbose=0)
-            grid.fit(x_train, y_train)  # perform the classification training
-            y_predict = grid.predict(x_test)
-
+            # grid.fit(x_train, y_train)  # perform the classification training
+            # y_predict = grid.predict(x_test)
             # output the result of classification to csv file
-            output_binary_result(row, y_test, y_predict)
+            # output_binary_result(row, y_test, y_predict)
 
-            # perform final classification based on AHA classification scheme
+            # perform multiclass classification based on AHA classification scheme
             y_train = aha_y_data[x_train_idx]
+            surviving_features = list(range(x_train.shape[1]))
+            feature_ranking = []
+            while True:  # loop for recursive feature elimination (RFE)
+                # Because of a bug in joblib, we see a lot of warnings here.
+                # https://github.com/scikit-learn/scikit-learn/issues/6370
+                # Use the workaround to turn off the warnings
+                import warnings
+                warnings.filterwarnings("ignore")
+                if len(surviving_features) <= args.rfe_iters:  # we already eliminated all of the features
+                    break
+
+                x_train_selected = x_train[:, surviving_features] # only select a subset of features for training
+                grid.fit(x_train_selected, y_train)  # perform the classification training
+                best_estimator = grid.best_estimator_  # now the estimator is trained and optimized
+                if args.rfe_iters:  # we want to perform RFE
+                    # find the worst feature in this round (lowest score/coefficient)
+                    if hasattr(best_estimator, 'coef_'):
+                        coefs = best_estimator.coef_
+                    elif hasattr(best_estimator, 'feature_importances_'):
+                        coefs = best_estimator.feature_importances_
+                    else:  # no feature importance scores for ranking.
+                        break
+                    ranking_scores = coefs ** 2
+                    if coefs.ndim > 1:
+                        ranking_scores = ranking_scores.sum(axis=0)
+                    i_min_score = np.argmin(ranking_scores)  # find worst feature
+                    worst_feature = surviving_features[i_min_score]  # find worst feature
+                    del surviving_features[i_min_score] # eliminate the worst feature in this round
+                    feature_ranking.append(worst_feature)
+                    print("worst feature:", selected_feature_names[worst_feature], ", CV score:", grid.best_score_, grid.best_params_)
+                    print("\tsurviviing_features:", [selected_feature_names[i] for i in surviving_features])
+                else:  # we don't want RFE, quit the loop directly
+                    break
+            # perform prediction with the selected features
             y_test = aha_y_data[x_test_idx]  # the actual AHA class
-            grid.fit(x_train, y_train)  # perform the classification training
-            y_predict = grid.predict(x_test)
-            # y_predict = aha_classifier(x_test, x_test_info, y_predict)  # the predicted AHA class
+            y_predict = best_estimator.predict(x_test[:, surviving_features])
 
             if args.error_log:  # calculate error statistics for each sample
                 included_idx = np.array(x_test_idx)  # samples included in this test iteration

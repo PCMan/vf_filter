@@ -70,7 +70,7 @@ def output_results(output_file, update_features, results):
                 old_x_data_info = pickle.load(f)
                 assert len(old_x_data) == len(x_data)
                 # preserve features in the old file if it's not updated
-                preserve_idx = [i for (i, name) in enumerate(vf_features.feature_names) if name not in args.update_features]
+                preserve_idx = [i for (i, name) in enumerate(vf_features.feature_names) if name not in update_features]
                 # copy values we want to preserve from the old data to the new ones
                 for new_x, new_info, old_x, old_info in zip(x_data, x_data_info, old_x_data, old_x_data_info):
                     assert (new_info.record_name == old_info.record_name and new_info.begin_time == old_info.begin_time)
