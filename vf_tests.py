@@ -4,7 +4,7 @@ import numpy as np
 from sklearn import preprocessing
 from sklearn import cross_validation
 from sklearn import grid_search
-from sklearn import feature_selection
+from sklearn.base import clone
 from vf_features import load_features, feature_names
 import vf_eval
 import csv
@@ -12,7 +12,7 @@ import argparse
 import vf_classify
 
 
-def create_csv_fields(estimator_name, select_feature_names, label_encoder, param_grid):
+def create_csv_fields(estimator_name, select_feature_names, label_encoder, param_grid, feature_ranks):
     csv_fields = ["iter"]
     csv_fields.extend(["{0}[{1}]".format(field, "dangerous") for field in ("Se", "Sp", "precision")])
     for class_name in vf_classify.aha_classe_names:
@@ -30,6 +30,9 @@ def create_csv_fields(estimator_name, select_feature_names, label_encoder, param
         # coefficients for regression, if applicable
         for class_id in range(0, 3):
             csv_fields.extend(["{0}[{1}]".format(feature, class_id) for feature in select_feature_names])
+
+    if feature_ranks:
+        csv_fields.extend(["rank[{0}]".format(feature) for feature in select_feature_names])
 
     # remember best parameters
     csv_fields.extend(sorted(param_grid.keys()))
@@ -75,8 +78,8 @@ def output_aha_result(row, x_test_idx, y_test, y_predict, label_encoder, x_rhyth
             row["Sp[{0}]".format(rhythm_name)] = result.sensitivity
 
 
-def output_best_params(row, grid_search_cv):
-    for key, val in grid_search_cv.best_params_.items():
+def output_best_params(row, best_params):
+    for key, val in best_params.items():
         if key.startswith("estimator__"):
             key = key[11:]
         row[key] = val
@@ -140,6 +143,39 @@ def output_errors(log_filename, predict_results, x_data_info, aha_y_data):
             writer.writerow(row)
 
 
+# estimator must be a fitted estimator which contains coef_ property.
+def find_worst_feature(estimator, feature_ids):
+    # find the worst feature in this round (lowest score/coefficient)
+    if hasattr(estimator, 'coef_'):
+        coefs = estimator.coef_
+    elif hasattr(estimator, 'feature_importances_'):
+        coefs = estimator.feature_importances_
+    else:  # no feature importance scores for ranking.
+        return -1
+    ranking_scores = coefs ** 2
+    if coefs.ndim > 1:
+        ranking_scores = ranking_scores.sum(axis=0)
+    i_min_score = np.argmin(ranking_scores)  # find worst feature
+    worst_feature = feature_ids[i_min_score]  # find worst feature
+    return worst_feature, i_min_score
+
+
+def output_feature_ranks(row, eliminated_features, selected_feature_names):
+    for order, feature_id in enumerate(reversed(eliminated_features)):
+        name = "rank[{0}]".format(selected_feature_names[feature_id])
+        row[name] = order + 1
+
+
+def calculate_average(rows, csv_fields, param_grid):
+    n_params = len(param_grid)
+    fields = csv_fields[1:-n_params]
+    avg = {"iter": "average"}
+    for field in fields:
+        col = [row.get(field, 0.0) for row in rows]
+        avg[field] = np.mean(col)
+    return avg
+
+
 def main():
     # parse command line arguments
     parser = argparse.ArgumentParser()
@@ -155,7 +191,7 @@ def main():
     parser.add_argument("-w", "--unbalanced-weight", action="store_true")  # avoid balanced class weighting
     parser.add_argument("-f", "--features", type=str, nargs="+", choices=feature_names)  # feature selection
     parser.add_argument("-x", "--exclude-rhythms", type=str, nargs="+", default=["(ASYS"])  # exclude some rhythms from the test
-    parser.add_argument("-r", "--rfe-n-features", type=int, default=None)  # recursive feature elimination
+    parser.add_argument("-r", "--perform-rfe", action="store_true")  # recursive feature elimination log file
     args = parser.parse_args()
     print(args)
 
@@ -167,6 +203,10 @@ def main():
     if test_size > 1:
         test_size = 0.3
     estimator_name = args.model
+    if args.perform_rfe:  # we want to perform RFE
+        if estimator_name not in ("svc_linear", "logistic_regression"):
+            print("Recursive feature elimination is not supported for this model.")
+            args.perform_rfe = None
 
     class_weight = "balanced"
     if args.unbalanced_weight:
@@ -209,9 +249,8 @@ def main():
         # 2D table to store test results: initialize all fields with -1
         predict_results = np.full(shape=(len(x_data), n_test_iters), fill_value=-1, dtype=int)
 
-    # also report the optimal parameters after tuning with CV to the csv file
-    csv_fields = create_csv_fields(estimator_name, selected_feature_names, label_encoder, param_grid)  # generate field names for the output csv file
-
+    # generate field names for the output csv file
+    csv_fields = create_csv_fields(estimator_name, selected_feature_names, label_encoder, param_grid, args.perform_rfe)
     with open(args.output, "w", newline="", buffering=1) as f:  # buffering=1 means line buffering
         rows = []
         writer = csv.DictWriter(f, fieldnames=csv_fields)
@@ -254,15 +293,19 @@ def main():
                                             n_jobs=n_jobs,
                                             cv=n_cv_folds,
                                             verbose=0)
-            grid.fit(x_train, y_train)  # perform the classification training
+            # binary classification: dangerous (VF/VT/VFL) and safe rhythm
+            grid.fit(x_train, y_train)
             y_predict = grid.predict(x_test)
-            # output the result of classification to csv file
+            # output the result of binary classification to csv file
             output_binary_result(row, y_test, y_predict)
 
-            # perform multiclass classification based on AHA classification scheme
-            y_train = aha_y_data[x_train_idx]
+            # multiclass classification based on AHA classification scheme (non-shockable, shockable, intermediate)
+            y_train = aha_y_data[x_train_idx]  # labels of the training set
+            y_test = aha_y_data[x_test_idx]  # labels of the testing set
             surviving_features = list(range(x_train.shape[1]))
-            feature_ranking = []
+            eliminated_features = []
+            best_estimator = None
+            best_params = None
             while True:  # loop for recursive feature elimination (RFE)
                 # Because of a bug in joblib, we see a lot of warnings here.
                 # https://github.com/scikit-learn/scikit-learn/issues/6370
@@ -270,34 +313,41 @@ def main():
                 import warnings
                 warnings.filterwarnings("ignore")
 
-                x_train_selected = x_train[:, surviving_features] # only select a subset of features for training
+                x_train_selected = x_train[:, surviving_features]  # only select a subset of features for training
                 grid.fit(x_train_selected, y_train)  # perform the classification training
-                best_estimator = grid.best_estimator_  # now the estimator is trained and optimized
-                if args.rfe_n_features:  # we want to perform RFE
-                    if len(surviving_features) <= args.rfe_n_features:  # we already eliminated all of the features
-                        break
+                if not best_estimator:  # train the estimator for the first time
+                    best_estimator = grid.best_estimator_  # now the estimator is trained and optimized
+                    y_predict = best_estimator.predict(x_test)  # predict the test data set
 
-                    # find the worst feature in this round (lowest score/coefficient)
-                    if hasattr(best_estimator, 'coef_'):
-                        coefs = best_estimator.coef_
-                    elif hasattr(best_estimator, 'feature_importances_'):
-                        coefs = best_estimator.feature_importances_
-                    else:  # no feature importance scores for ranking.
+                rfe_estimator = grid.best_estimator_  # estimator used for RFE
+                cv_score = grid.best_score_  # cross-validation score
+                best_params = grid.best_params_  # best parameter found using grid search
+
+                # NOTE: sklean GridSearchCV does not provide any way to get training score, which is important for
+                # further analysis, so let's try to obtain training score by ourselves.
+                if fit_params:
+                    training_score = rfe_estimator.score(x_train_selected, y_train, *fit_params)
+                else:
+                    training_score = rfe_estimator.score(x_train_selected, y_train)
+
+                # testing with currently selected features
+                # test_score = rfe_estimator.score(x_test[:, surviving_features], y_test)
+                # rfe_y_predict = rfe_estimator.predict(x_test[:, surviving_features])
+
+                if args.perform_rfe:  # we want to perform RFE
+                    # eliminate the worst feature in this round (lowest score/coefficient)
+                    worst_feature, i_worse_feature = find_worst_feature(rfe_estimator, surviving_features)
+                    del surviving_features[i_worse_feature]  # eliminate the worst feature in this round
+                    eliminated_features.append(worst_feature)
+                    print(selected_feature_names[worst_feature], [selected_feature_names[i] for i in surviving_features])
+                    if not surviving_features:  # we already eliminated all of the features
                         break
-                    ranking_scores = coefs ** 2
-                    if coefs.ndim > 1:
-                        ranking_scores = ranking_scores.sum(axis=0)
-                    i_min_score = np.argmin(ranking_scores)  # find worst feature
-                    worst_feature = surviving_features[i_min_score]  # find worst feature
-                    del surviving_features[i_min_score] # eliminate the worst feature in this round
-                    feature_ranking.append(worst_feature)
-                    print("worst feature:", selected_feature_names[worst_feature], ", CV score:", grid.best_score_, grid.best_params_)
-                    print("\tsurviviing_features:", [selected_feature_names[i] for i in surviving_features])
-                else:  # we don't want RFE, quit the loop directly
+                else:  # we don't want RFE at all, quit the loop directly
                     break
-            # perform prediction with the selected features
-            y_test = aha_y_data[x_test_idx]  # the actual AHA class
-            y_predict = best_estimator.predict(x_test[:, surviving_features])
+
+            # generate ranking for features based on the order of elimination
+            if args.perform_rfe:
+                output_feature_ranks(row, eliminated_features, selected_feature_names)
 
             if args.error_log:  # calculate error statistics for each sample
                 included_idx = np.array(x_test_idx)  # samples included in this test iteration
@@ -305,25 +355,17 @@ def main():
 
             # report the performance of final AHA classification
             output_aha_result(row, x_test_idx, y_test, y_predict, label_encoder, x_rhythm_types)
-
             # store best parameters of grid search
-            output_best_params(row, grid)
-
-            output_feature_scores(row, grid.best_estimator_, selected_feature_names)
+            output_best_params(row, best_params)
+            output_feature_scores(row, best_estimator, selected_feature_names)
 
             rows.append(row)  # remember each row so we can calculate average for them later
             print("\n".join(["\t{0} = {1}".format(field, row.get(field, 0.0)) for field in csv_fields[1:]]))
             writer.writerow(row)
-
             print("-" * 80)
 
         # calculate average for all iterations automatically and write to csv
-        n_params = len(param_grid)
-        fields = csv_fields[1:-n_params]
-        avg = {"iter": "average"}
-        for field in fields:
-            col = [row.get(field, 0.0) for row in rows]
-            avg[field] = np.mean(col)
+        avg = calculate_average(rows, csv_fields, param_grid)
         writer.writerow(avg)
         print("\n".join(["\t{0} = {1}".format(field, avg.get(field, 0.0)) for field in csv_fields[1:]]))
 
