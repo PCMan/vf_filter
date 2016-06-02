@@ -155,7 +155,7 @@ def main():
     parser.add_argument("-w", "--unbalanced-weight", action="store_true")  # avoid balanced class weighting
     parser.add_argument("-f", "--features", type=str, nargs="+", choices=feature_names)  # feature selection
     parser.add_argument("-x", "--exclude-rhythms", type=str, nargs="+", default=["(ASYS"])  # exclude some rhythms from the test
-    parser.add_argument("-r", "--rfe_iters", type=int, default=None)  # recursive feature elimination
+    parser.add_argument("-r", "--rfe-n-features", type=int, default=None)  # recursive feature elimination
     args = parser.parse_args()
     print(args)
 
@@ -254,10 +254,10 @@ def main():
                                             n_jobs=n_jobs,
                                             cv=n_cv_folds,
                                             verbose=0)
-            # grid.fit(x_train, y_train)  # perform the classification training
-            # y_predict = grid.predict(x_test)
+            grid.fit(x_train, y_train)  # perform the classification training
+            y_predict = grid.predict(x_test)
             # output the result of classification to csv file
-            # output_binary_result(row, y_test, y_predict)
+            output_binary_result(row, y_test, y_predict)
 
             # perform multiclass classification based on AHA classification scheme
             y_train = aha_y_data[x_train_idx]
@@ -269,13 +269,14 @@ def main():
                 # Use the workaround to turn off the warnings
                 import warnings
                 warnings.filterwarnings("ignore")
-                if len(surviving_features) <= args.rfe_iters:  # we already eliminated all of the features
-                    break
 
                 x_train_selected = x_train[:, surviving_features] # only select a subset of features for training
                 grid.fit(x_train_selected, y_train)  # perform the classification training
                 best_estimator = grid.best_estimator_  # now the estimator is trained and optimized
-                if args.rfe_iters:  # we want to perform RFE
+                if args.rfe_n_features:  # we want to perform RFE
+                    if len(surviving_features) <= args.rfe_n_features:  # we already eliminated all of the features
+                        break
+
                     # find the worst feature in this round (lowest score/coefficient)
                     if hasattr(best_estimator, 'coef_'):
                         coefs = best_estimator.coef_
