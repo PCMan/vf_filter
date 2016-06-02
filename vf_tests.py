@@ -322,7 +322,7 @@ def main():
         fields = csv_fields[1:-n_params]
         avg = {"iter": "average"}
         for field in fields:
-            col = [row[field] for row in rows]
+            col = [row.get(field, 0.0) for row in rows]
             avg[field] = np.mean(col)
         writer.writerow(avg)
         print("\n".join(["\t{0} = {1}".format(field, avg.get(field, 0.0)) for field in csv_fields[1:]]))
