@@ -172,7 +172,10 @@ def calculate_average(rows, csv_fields, param_grid):
     avg = {"iter": "average"}
     for field in fields:
         col = [row.get(field, 0.0) for row in rows]
-        avg[field] = np.mean(col)
+        mean = np.mean(col)
+        if field.startswith("Se") or field.startswith("Sp") or field.startswith("precision"):
+            mean = "{0:.2f}%".format(mean * 100)
+        avg[field] = mean
     return avg
 
 

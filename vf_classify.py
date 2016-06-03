@@ -141,7 +141,7 @@ def create_estimator(estimator_name, class_weight):
         from sklearn import svm
         if subtype == "linear":  # linear SVC uses liblinear insteaed of libsvm internally, which is more efficient
             param_grid = {
-                "C": np.logspace(-5, 2, 50),
+                "C": np.logspace(-6, 2, 50),
             }
             estimator = svm.LinearSVC(dual=False,  # dual=False when n_samples > n_features according to the API doc.
                                       class_weight=class_weight)
