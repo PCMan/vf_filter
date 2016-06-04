@@ -194,7 +194,8 @@ def main():
     parser.add_argument("-w", "--unbalanced-weight", action="store_true")  # avoid balanced class weighting
     parser.add_argument("-f", "--features", type=str, nargs="+", choices=feature_names)  # feature selection
     parser.add_argument("-x", "--exclude-rhythms", type=str, nargs="+", default=["(ASYS"])  # exclude some rhythms from the test
-    parser.add_argument("-r", "--perform-rfe", action="store_true")  # recursive feature elimination log file
+    parser.add_argument("-r", "--perform-rfe", action="store_true")  # recursive feature elimination
+    parser.add_argument("-k", "--feature-rank", type=str, nargs="+", choices=feature_names)  # feature rank for RFE
     args = parser.parse_args()
     print(args)
 
@@ -206,10 +207,6 @@ def main():
     if test_size > 1:
         test_size = 0.3
     estimator_name = args.model
-    if args.perform_rfe:  # we want to perform RFE
-        if estimator_name not in ("svc_linear", "logistic_regression"):
-            print("Recursive feature elimination is not supported for this model.")
-            args.perform_rfe = None
 
     class_weight = "balanced"
     if args.unbalanced_weight:
@@ -229,6 +226,15 @@ def main():
     else:
         selected_features = list(range(len(feature_names)))
         selected_feature_names = feature_names
+
+    feature_rank = None
+    if args.perform_rfe:  # we want to perform RFE
+        if args.feature_rank:
+            feature_rank = [selected_feature_names.index(name) for name in args.feature_rank]
+        else:
+            if estimator_name not in ("svc_linear", "logistic_regression"):
+                print("Recursive feature elimination is not supported for this model unless --feature-rank is given.")
+                args.perform_rfe = False
 
     if args.exclude_rhythms:  # exclude samples with some rhythms from the test
         x_data, x_data_info = vf_classify.exclude_rhythms(x_data, x_data_info, args.exclude_rhythms)
@@ -297,10 +303,10 @@ def main():
                                             cv=n_cv_folds,
                                             verbose=0)
             # binary classification: dangerous (VF/VT/VFL) and safe rhythm
-            grid.fit(x_train, y_train)
-            y_predict = grid.predict(x_test)
+            # grid.fit(x_train, y_train)
+            # y_predict = grid.predict(x_test)
             # output the result of binary classification to csv file
-            output_binary_result(row, y_test, y_predict)
+            # output_binary_result(row, y_test, y_predict)
 
             # multiclass classification based on AHA classification scheme (non-shockable, shockable, intermediate)
             y_train = aha_y_data[x_train_idx]  # labels of the training set
@@ -326,7 +332,7 @@ def main():
                 cv_score = grid.best_score_  # cross-validation score
                 best_params = grid.best_params_  # best parameter found using grid search
 
-                # NOTE: sklean GridSearchCV does not provide any way to get training score, which is important for
+                # NOTE: sklearn GridSearchCV does not provide any way to get training score, which is important for
                 # further analysis, so let's try to obtain training score by ourselves.
                 if fit_params:
                     training_score = rfe_estimator.score(x_train_selected, y_train, *fit_params)
@@ -334,13 +340,21 @@ def main():
                     training_score = rfe_estimator.score(x_train_selected, y_train)
 
                 # testing with currently selected features
-                # test_score = rfe_estimator.score(x_test[:, surviving_features], y_test)
-                # rfe_y_predict = rfe_estimator.predict(x_test[:, surviving_features])
+                test_score = rfe_estimator.score(x_test[:, surviving_features], y_test)
+                rfe_y_predict = rfe_estimator.predict(x_test[:, surviving_features])
+                rfe_row = {}
+                output_aha_result(rfe_row, x_test_idx, y_test, rfe_y_predict, label_encoder, x_rhythm_types)
+                print("cv_score:", cv_score, ", test_score:", test_score)
+                print("\n".join(["\t{0} = {1}".format(field, rfe_row.get(field, 0.0)) for field in csv_fields[1:]]))
 
-                if args.perform_rfe:  # we want to perform RFE
-                    # eliminate the worst feature in this round (lowest score/coefficient)
-                    worst_feature, i_worse_feature = find_worst_feature(rfe_estimator, surviving_features)
-                    del surviving_features[i_worse_feature]  # eliminate the worst feature in this round
+                if args.perform_rfe and surviving_features:  # we want to perform RFE
+                    if feature_rank:  # feature rank is already given, eliminate the last one
+                        worst_feature = feature_rank.pop()
+                        surviving_features.remove(worst_feature)  # eliminate the worst feature in this round
+                    else:
+                        # eliminate the worst feature in this round (lowest score/coefficient)
+                        worst_feature, i_worst_feature = find_worst_feature(rfe_estimator, surviving_features)
+                        del surviving_features[i_worst_feature]  # eliminate the worst feature in this round
                     eliminated_features.append(worst_feature)
                     print(selected_feature_names[worst_feature], [selected_feature_names[i] for i in surviving_features])
                     if not surviving_features:  # we already eliminated all of the features
