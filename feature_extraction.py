@@ -77,7 +77,7 @@ def output_results(output_file, update_features, results):
                     for i in preserve_idx:
                         new_x[i] = old_x[i]
         except Exception:
-            print("Unable to load", args.output, sys.exc_info())
+            print("Unable to load", output_file, sys.exc_info())
 
     # write to output files
     with open(output_file, "wb") as f:

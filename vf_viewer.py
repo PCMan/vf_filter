@@ -60,10 +60,15 @@ def main():
     fft_freq = fft_freq[0:n_fft]
     ax.plot(fft_freq, np.abs(fft))
 
+    ax = axes[2]
+    ax.set_title("After preprocessing")
+    ax.plot(samples, color="k")
+    """
     # log signal
     ax = axes[2]
     log_samples = np.log(samples - np.min(samples) + 0.1)# + np.finfo("float64").eps)
     ax.plot(log_samples, color="k")
+    ax.plot(samples, color="k")
     
     ax = axes[3]
     n_samples = len(log_samples)
@@ -74,6 +79,7 @@ def main():
     fft = fft[0:n_fft]
     fft_freq = fft_freq[0:n_fft]
     ax.plot(fft_freq, np.abs(fft))
+    """
 
     plt.show()
 

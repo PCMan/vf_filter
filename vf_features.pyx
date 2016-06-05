@@ -50,35 +50,6 @@ feature_names_set = set(feature_names)
 
 # time domain/morphology
 
-cdef tuple threshold_crossing_count(np.ndarray[double, ndim=1] samples, double threshold_ratio=0.2):
-    cdef double threshold = threshold_ratio * np.max(samples)
-    cdef int n_cross = 0
-    cdef bint higher = samples[0] >= threshold
-    cdef int first_cross = -1
-    cdef int last_cross = -1
-    cdef double sample
-    cdef int i
-    for i in range(1, len(samples)):
-        sample = samples[i]
-        if higher:
-            if sample < threshold:
-                n_cross += 1
-                if first_cross == -1:
-                    first_cross = i
-                last_cross = i
-                higher = False
-        else:
-            if sample >= threshold:
-                n_cross += 1
-                if first_cross == -1:
-                    first_cross = i
-                last_cross = i
-                higher = True
-    # print threshold, n_cross
-    if first_cross == -1:  # no cross at all?
-        n_cross = first_cross = last_cross = 0
-    return n_cross, first_cross, last_cross
-
 
 # average threshold crossing count
 # TCSC feature
@@ -126,48 +97,90 @@ cdef double threshold_crossing_sample_counts(np.ndarray[double, ndim=1] samples,
     return np.mean(tcsc)
 
 
+cdef int find_next_threshold_crossing(np.ndarray[double, ndim=1] samples, int begin, double threshold, bint go_up):
+    cdef int n_samples = len(samples)
+    for i in range(begin, n_samples):
+        if go_up:  # find rising edge
+            if sample[i] > threshold:
+                return i
+        else:  # find falling edge
+            if sample[i] <= threshold:
+                return i
+    return -1
+
+
 # average threshold crossing interval
 cdef double threshold_crossing_intervals(np.ndarray[double, ndim=1] samples, int sampling_rate, double threshold_ratio=0.2):
     cdef int n_samples = len(samples)
-    cdef int window_size = int(sampling_rate)  # calculate 1 TCI value per second
-    cdef int window_begin = 0
-    cdef int window_end = window_size
-    if window_end > n_samples:
-        window_end = window_size = n_samples
-
-    cdef list results = []
-    cdef int n_cross, first_cross, last_cross
-    cdef np.ndarray[double, ndim=1] window
-    while window_end <= n_samples:
-        window = samples[window_begin:window_end]
-        n_cross, first_cross, last_cross = threshold_crossing_count(window, threshold_ratio)
-        results.append((n_cross, first_cross, (window_size - last_cross)))
-        window_begin += sampling_rate
-        window_end += sampling_rate
-    # calculate average TCI of all windows
-    # TCI is calculated for every 1 second sub segment, but for each TCI,
-    # we also requires some values from its previous and later segments
+    cdef double threshold = threshold_ratio * np.max(samples)
+    cdef int pulse_rise, pulse_fall, last_rise = 0, last_fall = 0
     tcis = array("d")
-    cdef int first_result = 1
-    cdef int last_result = len(results) - 1
+    cdef list pulses = []
+    # find all pulses in the samples
+    cdef bint raised = (samples[0] >= threshold)  # currently above the threshold?
+    for i in range(1, n_samples):
+        if raised:  # currently the waveform is above the threshold
+            if samples[i] <= threshold:  # goes below the threshold
+                pulses.append((last_rise, i))  # a pulse = a (rise, fall) pair
+                raised = False
+        else:  # currently the waveform is below the threshold
+            if samples[i] > threshold:  # goes above the threshold
+                raised = True
+                last_rise = i
+    if raised:
+        pulses.append((last_rise, n_samples))
+    if not pulses:  # no pulses in the whole ECG segment
+        return 1000.0
 
-    if len(results) < 3:  # special handling for less than 3 results
-        first_result = 0
-        last_result = 2
+    # calculate TCI for every 1-s segment
+    cdef double tci
+    cdef int segment_size = int(sampling_rate)
+    cdef int segment_begin, segment_end
+    cdef int i_pulse = 0
+    cdef double n_segment_pulses = 0
+    cdef double t1 = 0, t2 = 0, t3 = 0, t4 = 0, fraction1, fraction2
+    pulses_iter = iter(pulses)
+    pulse_rise, pulse_fall = next(pulses_iter)
+    for segment_begin in range(segment_begin, n_samples, segment_size):
+        segment_end = segment_begin + segment_size
+        tci = 1000.0
+        t1 = t2 = t3 = t4 = 0
+        n_segment_pulses = 0
+        if pulse_rise > segment_end:  # no pulses in this 1-s segment at all
+            break
+        if pulse_rise >= segment_begin:  # the pulse rises in the current segment
+            t1 = (segment_begin - last_fall)
+            t2 = (pulse_rise - segment_begin)
+        else:  # the pulse rises in the previous segments
+            if pulse_fall <= segment_begin:  # the pulse already fell earlier
+                # the pulse is not in our segment, no more new pulses in the ECG signal
+                break
+            else:  # the pulse rises in an earlier segment
+                if pulse_fall >= segment_end: # the pulse falls in later segments
+                    # no more pulses for this segment
+                    t3 = t4 = 0
+                    break
+                else:  # the pulse falls in this segment
+                    t1 = t2 = 0
 
-    cdef double n, t1, t2, t3, t4, divider, tci
-    cdef int i
-    for i in range(first_result, last_result):
-        n, t2, t3 = results[i]
-        t1 = results[i - 1][1] if i >= 1 else 0  # last cross of the previous 1-s segment
-        t4 = results[i + 1][2] if (i + 1) < len(results) else 0  # first cross of the next 1-s segment
-        if n == 0:
-            tci = 1000
-        else:
-            divider = (n - 1 + t2 / (t1 + t2) + t3 / (t3 + t4))
-            tci = 1000 / divider
+        # count number of pulses in this 1-s segment
+        n_segment_pulses = 1
+        while pulse_fall < segment_end:
+            last_rise, last_fall = pulse_rise, pulse_fall
+            pulse_rise, pulse_fall = next(pulses_iter, (n_samples, n_samples))  # get next pulse position
+            if pulse_rise < segment_end:  # the next pulse still rises from within this segment
+                n_segment_pulses += 1
+            else:  # the next pulse rises in later segments, no more pulses in this segment
+                t3 = segment_end - last_rise
+                t4 = pulse_rise - segment_end
+                break
+
+        # calculate TCI for this segment
+        fraction1 = t1 / (t1 + t2) if (t1 + t2) > 0 else 0.0
+        fraction2 = t3 / (t3 + t4) if (t3 + t4) > 0 else 0.0
+        n_segment_pulses = (n_segment_pulses - 1) + fraction1 + fraction2
+        tci = 1000.0 / (n_segment_pulses if n_segment_pulses > 0 else 1.0)
         tcis.append(tci)
-    # print "  TCIs:", tcis
     return np.mean(tcis)
 
 
