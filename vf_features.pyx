@@ -97,18 +97,6 @@ cdef double threshold_crossing_sample_counts(np.ndarray[double, ndim=1] samples,
     return np.mean(tcsc)
 
 
-cdef int find_next_threshold_crossing(np.ndarray[double, ndim=1] samples, int begin, double threshold, bint go_up):
-    cdef int n_samples = len(samples)
-    for i in range(begin, n_samples):
-        if go_up:  # find rising edge
-            if sample[i] > threshold:
-                return i
-        else:  # find falling edge
-            if sample[i] <= threshold:
-                return i
-    return -1
-
-
 # average threshold crossing interval
 cdef double threshold_crossing_intervals(np.ndarray[double, ndim=1] samples, int sampling_rate, double threshold_ratio=0.2):
     cdef int n_samples = len(samples)
@@ -721,9 +709,9 @@ cpdef extract_features(np.ndarray[double, ndim=1] src_samples, int sampling_rate
     result.append(amplitude if "Amplitude" in features_to_extract else 0.0)
 
     # Empirical mode decomposition (EMD)
+    cdef int mode
     cdef set imf_feature_names = set(["IMF{0}_LZ".format(mode) for mode in range(1, 6)])
     cdef set imf_selected = features_to_extract & imf_feature_names
-    cdef int mode
     if imf_selected:
         # allow only update some IMF modes
         modes_to_update = [int(name[3]) for name in imf_selected]
