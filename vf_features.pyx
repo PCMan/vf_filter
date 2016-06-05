@@ -166,7 +166,7 @@ cdef double threshold_crossing_intervals(np.ndarray[double, ndim=1] samples, int
             next_rise = (segment_end + segment_size)
         dist_to_prev_pulse = rise - prev_fall  # t1 + t2: distance from the first pulse of this segment to its previous pulse
         dist_to_next_pulse = next_rise - fall  # t3 + t4: distance from the last pulse of this segment to its next pulse
-        dist_to_segment_begin = rise - segment_begin  # t1: distance from the first pulse to segment begin
+        dist_to_segment_begin = rise - segment_begin  # t2: distance from segment begin to the first pulse
         dist_to_segment_end = segment_end - fall  # t3: distance from the last pulse to segment end
         # print(prev_fall, segment_begin, rise, fall, segment_end, next_rise)
         # calculate TCI for this segment
