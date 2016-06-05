@@ -131,7 +131,9 @@ cdef double threshold_crossing_intervals(np.ndarray[double, ndim=1] samples, int
     cdef int rise, fall, prev_fall, next_rise
     for segment_begin in range(segment_begin, n_samples, segment_size):
         if i_pulse >= len(pulses):  # no more pulses
-            tcis.append(1000.0)
+            # do not calculate TCI value for the first and the last second
+            if segment_begin != 0 or (segment_begin + segment_size) < n_samples:
+                tcis.append(1000.0)
             continue
         segment_end = segment_begin + segment_size
         rise, fall = pulses[i_pulse]
@@ -143,6 +145,13 @@ cdef double threshold_crossing_intervals(np.ndarray[double, ndim=1] samples, int
                 i_last_pulse += 1
             else:
                 break
+        i_pulse = i_last_pulse + 1
+
+        # do not calculate TCI value for the first and the last second
+        # since there is no way to get correct t1, t2, t3, and t4 values.
+        if segment_begin == 0 or (segment_begin + segment_size) >= n_samples:
+            continue
+
         n_pulses = (i_last_pulse - i_first_pulse + 1)  # number of pulses in this segment
         rise = pulses[i_first_pulse][0]  # first rise in this segment
         fall = pulses[i_last_pulse][1]  # last fall in this segment
@@ -163,8 +172,7 @@ cdef double threshold_crossing_intervals(np.ndarray[double, ndim=1] samples, int
         # print(n_pulses, fraction1, fraction2)
         n_pulses = (n_pulses - 1) + fraction1 + fraction2
         tci = 1000.0 / (n_pulses if n_pulses > 0 else 1.0)
-        tcis.append(tci)    
-        i_pulse = i_last_pulse + 1
+        tcis.append(tci)
     # print(tcis)
     return np.mean(tcis)
 
