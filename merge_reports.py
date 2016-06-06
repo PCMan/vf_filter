@@ -28,7 +28,7 @@ def main():
     for field in header[1:]:
         col = [float(row.get(field, 0.0)) for row in rows]
         mean = np.mean(col)
-        if field.startswith("Se") or field.startswith("Sp") or field.startswith("precision"):
+        if field.startswith("Se") or field.startswith("Sp") or field.startswith("precision") or field.startswith("AHA_"):
             mean = "{0:.2f}%".format(mean * 100)
         avg[field] = mean
     rows.append(avg)
