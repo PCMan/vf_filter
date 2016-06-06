@@ -12,9 +12,25 @@ import argparse
 import vf_classify
 
 
+def has_coefficients(estimator_name):
+    return estimator_name in ("logistic_regression", "svc_linear")
+    
+def has_feature_importances(estimator_name):
+    return estimator_name in ("random_forest", "adaboost", "gradient_boosting")
+
+
 def create_csv_fields(estimator_name, select_feature_names, label_encoder, param_grid, feature_ranks):
     csv_fields = ["iter"]
-    csv_fields.extend(["{0}[{1}]".format(field, "dangerous") for field in ("Se", "Sp", "precision")])
+
+    # fields for reporting AHA performance results
+    csv_fields.extend(["AHA_Se[shockable]", "AHA_Sp[non_shockable]", "AHA_precision[shockable]"])
+    for class_name in label_encoder.classes_:
+        if class_name in vf_classify.shockable_rhythms:  # shockable rhythms
+            csv_fields.append("AHA_Se[{0}]".format(class_name))
+        else:  # other non-shockable rhythms
+            csv_fields.append("AHA_Sp[{0}]".format(class_name))
+
+    # fields for detailed multi-class results
     for class_name in vf_classify.aha_classe_names:
         csv_fields.extend(["{0}[{1}]".format(field, class_name) for field in ("Se", "Sp", "precision")])
     for class_name in label_encoder.classes_:
@@ -23,30 +39,23 @@ def create_csv_fields(estimator_name, select_feature_names, label_encoder, param
         else:  # other non-shockable rhythms
             csv_fields.append("Sp[{0}]".format(class_name))
 
-    if estimator_name in ("random_forest", "adaboost", "gradient_boosting"):
-        # feature scores, if applicable
+    # fields for feature importance/ranking
+    if has_feature_importances(estimator_name):
         csv_fields.extend(select_feature_names)
-    elif estimator_name in ("logistic_regression", "svc_linear"):
-        # coefficients for regression, if applicable
+    elif has_coefficients(estimator_name):
         for class_id in range(0, 3):
             csv_fields.extend(["{0}[{1}]".format(feature, class_id) for feature in select_feature_names])
-
     if feature_ranks:
         csv_fields.extend(["rank[{0}]".format(feature) for feature in select_feature_names])
 
-    # remember best parameters
+    # remember best parameters and CV score
+    csv_fields.append("cv_score")
+    csv_fields.append("testing_score")
     csv_fields.extend(sorted(param_grid.keys()))
     return csv_fields
 
 
-def output_binary_result(row, y_test, y_predict):
-    result = vf_eval.BinaryClassificationResult(y_test, y_predict)
-    row["Se[dangerous]"] = result.sensitivity
-    row["Sp[dangerous]"] = result.specificity
-    row["precision[dangerous]"] = result.precision
-
-
-def output_aha_result(row, x_test_idx, y_test, y_predict, label_encoder, x_rhythm_types):
+def output_multiclass_result(row, x_test_idx, y_test, y_predict, label_encoder, x_rhythm_types):
     results = vf_eval.MultiClassificationResult(y_test, y_predict, classes=vf_classify.aha_classes).results
     for class_name, result in zip(vf_classify.aha_classe_names, results):
         row["Se[{0}]".format(class_name)] = result.sensitivity
@@ -78,12 +87,42 @@ def output_aha_result(row, x_test_idx, y_test, y_predict, label_encoder, x_rhyth
             row["Sp[{0}]".format(rhythm_name)] = result.sensitivity
 
 
+def output_aha_result(row, y_test, y_predict, label_encoder, x_rhythm_types):
+    # AHA asks for high Se for shockable rhythms (coarse VF and rapid VT) and
+    # high Sp for non-shockable rhythms.
+    # Only shockable and non-shockable rhythms are included in the performance evaluation.
+    # The intermediate group excluded, but its performance may still be reported.
+    included_mask = (y_test != vf_classify.INTERMEDIATE)
+
+    # now we only have SHOCKABLE and NON_SHOCKABLE in the test and predicted data
+    bin_y_test = y_test[included_mask]
+    bin_y_predict = y_predict[included_mask]
+    results = vf_eval.BinaryClassificationResult(bin_y_test, bin_y_predict)
+    row["AHA_Se[shockable]"] = results.sensitivity
+    row["AHA_Sp[non_shockable]"] = results.specificity
+    row["AHA_precision[shockable]"] = results.precision
+
+    # TODO: report performance for intermediate class?
+
+    # report performance for each rhythm type (suggested by AHA guideline for AED development)
+    for rhythm_id, rhythm_name in enumerate(label_encoder.classes_):
+        y_test_rhythm_types = x_rhythm_types[included_mask]
+        idx = (y_test_rhythm_types == rhythm_id)
+        rhythm_y_test = bin_y_test[idx]
+        rhythm_y_predict = bin_y_predict[idx]
+        results = vf_eval.BinaryClassificationResult(rhythm_y_test, rhythm_y_predict)
+        # convert to binary classification for each type of arrythmia
+        if rhythm_name in vf_classify.shockable_rhythms:  # for shockable rhythms, report sensitivity (TPR)
+            row["AHA_Se[{0}]".format(rhythm_name)] = results.sensitivity
+        else:  # for non-shockable rhythms, report specificity (TNR)
+            row["AHA_Sp[{0}]".format(rhythm_name)] = results.specificity
+
+
 def output_best_params(row, best_params):
     for key, val in best_params.items():
         if key.startswith("estimator__"):
             key = key[11:]
         row[key] = val
-        # row.update(grid_search_cv.best_params_)
 
 
 def output_feature_scores(row, estimator, selected_feature_names):
@@ -195,7 +234,6 @@ def main():
     parser.add_argument("-f", "--features", type=str, nargs="+", choices=feature_names)  # feature selection
     parser.add_argument("-x", "--exclude-rhythms", type=str, nargs="+", default=["(ASYS"])  # exclude some rhythms from the test
     parser.add_argument("-r", "--perform-rfe", action="store_true")  # recursive feature elimination
-    parser.add_argument("-k", "--feature-rank", type=str, nargs="+", choices=feature_names)  # feature rank for RFE
     args = parser.parse_args()
     print(args)
 
@@ -227,14 +265,10 @@ def main():
         selected_features = list(range(len(feature_names)))
         selected_feature_names = feature_names
 
-    feature_rank = None
     if args.perform_rfe:  # we want to perform RFE
-        if args.feature_rank:
-            feature_rank = [selected_feature_names.index(name) for name in args.feature_rank]
-        else:
-            if estimator_name not in ("svc_linear", "logistic_regression"):
-                print("Recursive feature elimination is not supported for this model unless --feature-rank is given.")
-                args.perform_rfe = False
+        if not has_coefficients(estimator_name) and not has_feature_importances(estimator_name):
+            print("Recursive feature elimination is not supported for this model.")
+            args.perform_rfe = False
 
     if args.exclude_rhythms:  # exclude samples with some rhythms from the test
         x_data, x_data_info = vf_classify.exclude_rhythms(x_data, x_data_info, args.exclude_rhythms)
@@ -302,11 +336,6 @@ def main():
                                             n_jobs=n_jobs,
                                             cv=n_cv_folds,
                                             verbose=0)
-            # binary classification: dangerous (VF/VT/VFL) and safe rhythm
-            # grid.fit(x_train, y_train)
-            # y_predict = grid.predict(x_test)
-            # output the result of binary classification to csv file
-            # output_binary_result(row, y_test, y_predict)
 
             # multiclass classification based on AHA classification scheme (non-shockable, shockable, intermediate)
             y_train = aha_y_data[x_train_idx]  # labels of the training set
@@ -332,29 +361,19 @@ def main():
                 cv_score = grid.best_score_  # cross-validation score
                 best_params = grid.best_params_  # best parameter found using grid search
 
-                # NOTE: sklearn GridSearchCV does not provide any way to get training score, which is important for
-                # further analysis, so let's try to obtain training score by ourselves.
-                if fit_params:
-                    training_score = rfe_estimator.score(x_train_selected, y_train, *fit_params)
-                else:
-                    training_score = rfe_estimator.score(x_train_selected, y_train)
-
                 # testing with currently selected features
                 test_score = rfe_estimator.score(x_test[:, surviving_features], y_test)
                 rfe_y_predict = rfe_estimator.predict(x_test[:, surviving_features])
                 rfe_row = {}
-                output_aha_result(rfe_row, x_test_idx, y_test, rfe_y_predict, label_encoder, x_rhythm_types)
+                output_aha_result(rfe_row, y_test, rfe_y_predict, label_encoder, x_rhythm_types)
+                output_multiclass_result(rfe_row, x_test_idx, y_test, rfe_y_predict, label_encoder, x_rhythm_types)
                 print("cv_score:", cv_score, ", test_score:", test_score)
                 print("\n".join(["\t{0} = {1}".format(field, rfe_row.get(field, 0.0)) for field in csv_fields[1:]]))
 
                 if args.perform_rfe and surviving_features:  # we want to perform RFE
-                    if feature_rank:  # feature rank is already given, eliminate the last one
-                        worst_feature = feature_rank.pop()
-                        surviving_features.remove(worst_feature)  # eliminate the worst feature in this round
-                    else:
-                        # eliminate the worst feature in this round (lowest score/coefficient)
-                        worst_feature, i_worst_feature = find_worst_feature(rfe_estimator, surviving_features)
-                        del surviving_features[i_worst_feature]  # eliminate the worst feature in this round
+                    # eliminate the worst feature in this round (lowest score/coefficient)
+                    worst_feature, i_worst_feature = find_worst_feature(rfe_estimator, surviving_features)
+                    del surviving_features[i_worst_feature]  # eliminate the worst feature in this round
                     eliminated_features.append(worst_feature)
                     print(selected_feature_names[worst_feature], [selected_feature_names[i] for i in surviving_features])
                     if not surviving_features:  # we already eliminated all of the features
@@ -371,7 +390,8 @@ def main():
                 predict_results[included_idx, it - 1] = y_predict  # remember prediction results of all included samples
 
             # report the performance of final AHA classification
-            output_aha_result(row, x_test_idx, y_test, y_predict, label_encoder, x_rhythm_types)
+            output_aha_result(row, y_test, y_predict, label_encoder, x_rhythm_types)
+            output_multiclass_result(row, x_test_idx, y_test, y_predict, label_encoder, x_rhythm_types)
             # store best parameters of grid search
             output_best_params(row, best_params)
             output_feature_scores(row, best_estimator, selected_feature_names)
