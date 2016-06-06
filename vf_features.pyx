@@ -97,90 +97,71 @@ cdef double threshold_crossing_sample_counts(np.ndarray[double, ndim=1] samples,
     return np.mean(tcsc)
 
 
+cdef tuple find_threshold_crossing(np.ndarray[double, ndim=1] segment, double threshold_ratio):
+    cdef double threshold = np.max(segment) * threshold_ratio
+    cdef bint raised = False
+    cdef int n_samples = len(segment)
+    cdef int i, n_pulses = 0
+    cdef int first_rise = -1, last_fall = -1
+    for i in range(0, n_samples):
+        if raised:  # currently the waveform is above the threshold
+            if segment[i] <= threshold:  # goes below the threshold
+                raised = False
+                last_fall = i
+        else:  # currently the waveform is below the threshold
+            if segment[i] > threshold:  # goes above the threshold
+                raised = True
+                if n_pulses == 0:  # this is the first_pulse
+                    first_rise = i
+                n_pulses += 1
+    cdef int begin_silence
+    cdef tail_silence
+    if n_pulses > 0:  # found at least one pulse in this segment
+        begin_silence = first_rise
+        if last_fall == -1:  # the last pulse hasn't fall
+            tail_silence = 0
+        else:
+            tail_silence = (n_samples - last_fall)
+    else:  # no pulses in this segment at all
+        begin_silence = n_samples
+        tail_silence = n_samples
+    return begin_silence, tail_silence, n_pulses
+
+
 # average threshold crossing interval
 cdef double threshold_crossing_intervals(np.ndarray[double, ndim=1] samples, int sampling_rate, double threshold_ratio=0.2):
-    tcis = array("d")
     cdef int n_samples = len(samples)
     cdef int segment_size = int(sampling_rate)
-    cdef int segment_begin = 0, segment_end = segment_size
-    cdef double threshold = threshold_ratio * np.max(samples[segment_begin:segment_end])
-    cdef int rise, fall, prev_fall, next_rise
-    cdef list pulses = []
-    # find all pulses in the samples
-    cdef bint raised = (samples[0] >= threshold)  # currently above the threshold?
-    cdef int i
-    for i in range(1, n_samples):
-        if i > segment_end:  # change to the next segment
-            segment_begin += segment_size
-            segment_end += segment_size
-            if segment_end > n_samples:
-                segment_end = n_samples
-            # update the threshold for each 1-s segment
-            threshold = threshold_ratio * np.max(samples[segment_begin:segment_end])
+    cdef int segment_begin = 0, segment_end
+    cdef list segment_pulses = []
+    cdef tuple pulses
+    for segment_begin in range(0, n_samples, segment_size):
+        segment_end = segment_begin + segment_size
+        segment = samples[segment_begin:segment_end]
+        pulses = find_threshold_crossing(segment, threshold_ratio)
+        segment_pulses.append(pulses)
 
-        if raised:  # currently the waveform is above the threshold
-            if samples[i] <= threshold:  # goes below the threshold
-                pulses.append((prev_rise, i))  # a pulse = a (rise, fall) pair
-                raised = False
-        else:  # currently the waveform is below the threshold
-            if samples[i] > threshold:  # goes above the threshold
-                raised = True
-                prev_rise = i
-    if raised:
-        pulses.append((prev_rise, n_samples))
-    if not pulses:  # no pulses in the whole ECG segment at all
+    cdef int n_segments = len(segment_pulses)
+    if n_segments < 3:  # we need at least 3 seconds to calculate a TCI value
         return 1000.0
 
-    # calculate TCI for every 1-s segment
-    cdef double tci
-    cdef int i_pulse = 0, i_first_pulse, i_last_pulse
-    cdef double n_pulses = 0
-    cdef double fraction1, fraction2
-    cdef double dist_to_prev_pulse, dist_to_next_pulse, dist_to_segment_begin, dist_to_segment_end
-    for segment_begin in range(0, n_samples, segment_size):
-        if i_pulse >= len(pulses):  # no more pulses
-            # do not calculate TCI value for the first and the last second
-            if segment_begin != 0 or (segment_begin + segment_size) < n_samples:
-                tcis.append(1000.0)
-            continue
+    # calculate TCI for every 1-s segment (requires the previous and next 1-s segments)
+    tcis = array('d')
+    cdef double tci, fraction1, fraction2, effective_n_pulses
+    cdef int i_segment, n_pulses, t1, t2, t3, t4
+    for i_segment in range(1, n_segments - 1):
+        segment_begin = i_segment * segment_size
         segment_end = segment_begin + segment_size
-
-        rise, fall = pulses[i_pulse]
-        i_first_pulse = i_pulse
-        i_last_pulse = i_pulse
-        while (i_last_pulse + 1) < len(pulses):
-            rise, fall = pulses[i_last_pulse + 1]  # get next pulse
-            if rise <= segment_end:  # the pulse happens in the current segment
-                i_last_pulse += 1
-            else:
-                break
-        i_pulse = i_last_pulse + 1
-
-        # do not calculate TCI value for the first and the last second
-        # since there is no way to get correct t1, t2, t3, and t4 values.
-        if segment_begin == 0 or segment_end >= n_samples:
-            continue
-
-        n_pulses = (i_last_pulse - i_first_pulse + 1)  # number of pulses in this segment
-        rise = pulses[i_first_pulse][0]  # first rise in this segment
-        fall = pulses[i_last_pulse][1]  # last fall in this segment
-        prev_fall = pulses[i_first_pulse - 1][1] if i_first_pulse > 0 else 0  # last fall in the prev segment
-        if prev_fall < (segment_begin - segment_size):
-            prev_fall = (segment_begin - segment_size)
-        next_rise = pulses[i_last_pulse + 1][0] if (i_last_pulse + 1) < len(pulses) else n_samples  # first rise in the next segment
-        if next_rise > (segment_end + segment_size):
-            next_rise = (segment_end + segment_size)
-        dist_to_prev_pulse = rise - prev_fall  # t1 + t2: distance from the first pulse of this segment to its previous pulse
-        dist_to_next_pulse = next_rise - fall  # t3 + t4: distance from the last pulse of this segment to its next pulse
-        dist_to_segment_begin = rise - segment_begin  # t2: distance from segment begin to the first pulse
-        dist_to_segment_end = segment_end - fall  # t3: distance from the last pulse to segment end
+        t1 = segment_pulses[i_segment - 1][1]
+        t4 = segment_pulses[i_segment + 1][0]
+        t2, t3, n_pulses = segment_pulses[i_segment]
         # print(prev_fall, segment_begin, rise, fall, segment_end, next_rise)
         # calculate TCI for this segment
-        fraction1 = dist_to_segment_begin / dist_to_prev_pulse if dist_to_prev_pulse > 0 else 0.0
-        fraction2 = dist_to_segment_end / dist_to_next_pulse if dist_to_next_pulse > 0 else 0.0
+        fraction1 = <double>(t2) / <double>(t1 + t2) if (t1 + t2) > 0 else 0.0
+        fraction2 = <double>(t3) / <double>(t3 + t4) if (t3 + t4) > 0 else 0.0
         # print(n_pulses, fraction1, fraction2)
-        n_pulses = (n_pulses - 1) + fraction1 + fraction2
-        tci = 1000.0 / (n_pulses if n_pulses > 0 else 1.0)
+        effective_n_pulses = <double>(n_pulses - 1) + fraction1 + fraction2
+        tci = 1000.0 / (effective_n_pulses if effective_n_pulses > 0 else 1.0)
         tcis.append(tci)
     # print(tcis)
     return np.mean(tcis)

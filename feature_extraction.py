@@ -55,11 +55,14 @@ def load_all_segments(args):
 def output_results(output_file, update_features, results):
     x_data_info = []
     x_data = []
+    max_tci = 0
     # sort the results from multiple jobs according to the order they are emitted
     results.sort(key=lambda result: result[0])
     for idx, features, segment_info in results:
         x_data_info.append(segment_info)
         x_data.append(features)
+        if features[1] > max_tci:
+            max_tci = features[1]
 
     # try to update existing feature file
     if update_features:
