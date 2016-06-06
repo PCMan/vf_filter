@@ -32,7 +32,7 @@ def main():
                 value = float(row.get(field, 0.0))
             except ValueError:
                 value = 0.0
-        col.append(value)
+            col.append(value)
         mean = np.mean(col)
         if field.startswith("Se") or field.startswith("Sp") or field.startswith("precision") or field.startswith("AHA_"):
             mean = "{0:.2f}%".format(mean * 100)
