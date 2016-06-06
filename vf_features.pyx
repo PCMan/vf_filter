@@ -99,43 +99,52 @@ cdef double threshold_crossing_sample_counts(np.ndarray[double, ndim=1] samples,
 
 # average threshold crossing interval
 cdef double threshold_crossing_intervals(np.ndarray[double, ndim=1] samples, int sampling_rate, double threshold_ratio=0.2):
-    cdef int n_samples = len(samples)
-    cdef double threshold = threshold_ratio * np.max(samples)
-    cdef int pulse_rise, pulse_fall, last_rise = 0, last_fall = 0
     tcis = array("d")
+    cdef int n_samples = len(samples)
+    cdef int segment_size = int(sampling_rate)
+    cdef int segment_begin = 0, segment_end = segment_size
+    cdef double threshold = threshold_ratio * np.max(samples[segment_begin:segment_end])
+    cdef int rise, fall, prev_fall, next_rise
     cdef list pulses = []
     # find all pulses in the samples
     cdef bint raised = (samples[0] >= threshold)  # currently above the threshold?
+    cdef int i
     for i in range(1, n_samples):
+        if i > segment_end:  # change to the next segment
+            segment_begin += segment_size
+            segment_end += segment_size
+            if segment_end > n_samples:
+                segment_end = n_samples
+            # update the threshold for each 1-s segment
+            threshold = threshold_ratio * np.max(samples[segment_begin:segment_end])
+
         if raised:  # currently the waveform is above the threshold
             if samples[i] <= threshold:  # goes below the threshold
-                pulses.append((last_rise, i))  # a pulse = a (rise, fall) pair
+                pulses.append((prev_rise, i))  # a pulse = a (rise, fall) pair
                 raised = False
         else:  # currently the waveform is below the threshold
             if samples[i] > threshold:  # goes above the threshold
                 raised = True
-                last_rise = i
+                prev_rise = i
     if raised:
-        pulses.append((last_rise, n_samples))
+        pulses.append((prev_rise, n_samples))
     if not pulses:  # no pulses in the whole ECG segment at all
         return 1000.0
 
     # calculate TCI for every 1-s segment
     cdef double tci
-    cdef int segment_size = int(sampling_rate)
-    cdef int segment_begin, segment_end
     cdef int i_pulse = 0, i_first_pulse, i_last_pulse
     cdef double n_pulses = 0
     cdef double fraction1, fraction2
     cdef double dist_to_prev_pulse, dist_to_next_pulse, dist_to_segment_begin, dist_to_segment_end
-    cdef int rise, fall, prev_fall, next_rise
-    for segment_begin in range(segment_begin, n_samples, segment_size):
+    for segment_begin in range(0, n_samples, segment_size):
         if i_pulse >= len(pulses):  # no more pulses
             # do not calculate TCI value for the first and the last second
             if segment_begin != 0 or (segment_begin + segment_size) < n_samples:
                 tcis.append(1000.0)
             continue
         segment_end = segment_begin + segment_size
+
         rise, fall = pulses[i_pulse]
         i_first_pulse = i_pulse
         i_last_pulse = i_pulse
@@ -149,7 +158,7 @@ cdef double threshold_crossing_intervals(np.ndarray[double, ndim=1] samples, int
 
         # do not calculate TCI value for the first and the last second
         # since there is no way to get correct t1, t2, t3, and t4 values.
-        if segment_begin == 0 or (segment_begin + segment_size) >= n_samples:
+        if segment_begin == 0 or segment_end >= n_samples:
             continue
 
         n_pulses = (i_last_pulse - i_first_pulse + 1)  # number of pulses in this segment
