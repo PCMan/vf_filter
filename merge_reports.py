@@ -26,7 +26,13 @@ def main():
     # calculate_average
     avg = {"iter": "average"}
     for field in header[1:]:
-        col = [float(row.get(field, 0.0)) for row in rows]
+        col = []
+        for row in rows:
+            try:
+                value = float(row.get(field, 0.0))
+            except ValueError:
+                value = 0.0
+        col.append(value)
         mean = np.mean(col)
         if field.startswith("Se") or field.startswith("Sp") or field.startswith("precision") or field.startswith("AHA_"):
             mean = "{0:.2f}%".format(mean * 100)
