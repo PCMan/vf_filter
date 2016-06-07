@@ -14,7 +14,8 @@ import vf_classify
 
 def has_coefficients(estimator_name):
     return estimator_name in ("logistic_regression", "svc_linear")
-    
+
+
 def has_feature_importances(estimator_name):
     return estimator_name in ("random_forest", "adaboost", "gradient_boosting")
 
@@ -27,14 +28,17 @@ def create_csv_fields(estimator_name, select_feature_names, label_encoder, param
     for class_name in label_encoder.classes_:
         if class_name in vf_classify.shockable_rhythms:  # shockable rhythms
             csv_fields.append("AHA_Se[{0}]".format(class_name))
-        else:  # other non-shockable rhythms
+        elif class_name in vf_classify.intermediate_rhythms:  # intermediate rhythms
+            pass  # FIXME: how to report the results for intermediate class?
+        else:  # other non-shockable rhythms, report specificity
             csv_fields.append("AHA_Sp[{0}]".format(class_name))
 
     # fields for detailed multi-class results
     for class_name in vf_classify.aha_classe_names:
         csv_fields.extend(["{0}[{1}]".format(field, class_name) for field in ("Se", "Sp", "precision")])
     for class_name in label_encoder.classes_:
-        if class_name in vf_classify.shockable_rhythms:  # shockable rhythms
+        # report sensitivity for shockable rhythms or intermediate rhythms
+        if class_name in vf_classify.shockable_rhythms or class_name in vf_classify.intermediate_rhythms:
             csv_fields.append("Se[{0}]".format(class_name))
         else:  # other non-shockable rhythms
             csv_fields.append("Sp[{0}]".format(class_name))
@@ -71,8 +75,9 @@ def output_multiclass_result(row, x_test_idx, y_test, y_predict, label_encoder, 
         # convert to binary classification for each type of arrythmia
         bin_y_test = np.zeros((len(rhythm_y_test), 1))
         bin_y_predict = np.zeros((len(rhythm_y_predict), 1))
-        if rhythm_name in vf_classify.shockable_rhythms:  # for shockable rhythms, report sensitivity (TPR)
-            if rhythm_name == "(VF,coarse" or rhythm_name == "(VT,rapid":
+        # for shockable rhythms, report sensitivity (TPR)
+        if rhythm_name in vf_classify.shockable_rhythms or rhythm_name in vf_classify.intermediate_rhythms:
+            if rhythm_name in vf_classify.shockable_rhythms:
                 target = vf_classify.SHOCKABLE
             else:
                 target = vf_classify.INTERMEDIATE
@@ -87,33 +92,37 @@ def output_multiclass_result(row, x_test_idx, y_test, y_predict, label_encoder, 
             row["Sp[{0}]".format(rhythm_name)] = result.sensitivity
 
 
-def output_aha_result(row, y_test, y_predict, label_encoder, x_rhythm_types):
+def output_aha_result(row, x_test_idx, y_test, y_predict, label_encoder, x_rhythm_types):
+    # get actual rhythm types for the test samples
+    y_test_rhythm_types = x_rhythm_types[x_test_idx]
+
     # AHA asks for high Se for shockable rhythms (coarse VF and rapid VT) and
     # high Sp for non-shockable rhythms.
     # Only shockable and non-shockable rhythms are included in the performance evaluation.
     # The intermediate group excluded, but its performance may still be reported.
-    included_mask = (y_test != vf_classify.INTERMEDIATE)
-
+    exclude_intermediate_mask = (y_test != vf_classify.INTERMEDIATE)
     # now we only have SHOCKABLE and NON_SHOCKABLE in the test and predicted data
-    bin_y_test = y_test[included_mask]
-    bin_y_predict = y_predict[included_mask]
-    results = vf_eval.BinaryClassificationResult(bin_y_test, bin_y_predict)
+    binary_y_test = y_test[exclude_intermediate_mask]
+    binary_y_predict = y_predict[exclude_intermediate_mask]
+    results = vf_eval.BinaryClassificationResult(binary_y_test, binary_y_predict)
     row["AHA_Se[shockable]"] = results.sensitivity
     row["AHA_Sp[non_shockable]"] = results.specificity
     row["AHA_precision[shockable]"] = results.precision
+    binary_y_test_rhythm_types = y_test_rhythm_types[exclude_intermediate_mask]  # exclude the intermediate class
 
-    # TODO: report performance for intermediate class?
-
+    # FIXME: How to report performance for intermediate class?
     # report performance for each rhythm type (suggested by AHA guideline for AED development)
     for rhythm_id, rhythm_name in enumerate(label_encoder.classes_):
-        y_test_rhythm_types = x_rhythm_types[included_mask]
-        idx = (y_test_rhythm_types == rhythm_id)
-        rhythm_y_test = bin_y_test[idx]
-        rhythm_y_predict = bin_y_predict[idx]
+        # only evaluate test samples having this rhythm type
+        rhythm_mask = (binary_y_test_rhythm_types == rhythm_id)
+        rhythm_y_test = binary_y_test[rhythm_mask]
+        rhythm_y_predict = binary_y_predict[rhythm_mask]
         results = vf_eval.BinaryClassificationResult(rhythm_y_test, rhythm_y_predict)
         # convert to binary classification for each type of arrythmia
         if rhythm_name in vf_classify.shockable_rhythms:  # for shockable rhythms, report sensitivity (TPR)
             row["AHA_Se[{0}]".format(rhythm_name)] = results.sensitivity
+        elif rhythm_name in vf_classify.intermediate_rhythms:
+            pass  # FIXME: how to report performanc for fine VF and slow VT?
         else:  # for non-shockable rhythms, report specificity (TNR)
             row["AHA_Sp[{0}]".format(rhythm_name)] = results.specificity
 
@@ -227,7 +236,7 @@ def main():
     parser.add_argument("-e", "--error-log", type=str, help="filename of the error log")
     parser.add_argument("-j", "--jobs", type=int, default=-1)
     parser.add_argument("-t", "--iter", type=int, default=1)
-    parser.add_argument("-s", "--scorer", type=str, choices=vf_eval.scorer_names, default="f1_weighted")
+    parser.add_argument("-s", "--scorer", type=str, choices=vf_eval.scorer_names, default="f1_macro")
     parser.add_argument("-c", "--cv-fold", type=int, default=5)  # 5 fold CV by default
     parser.add_argument("-p", "--test-percent", type=int, default=30)  # 30% test set size
     parser.add_argument("-w", "--unbalanced-weight", action="store_true")  # avoid balanced class weighting
@@ -344,6 +353,8 @@ def main():
             eliminated_features = []
             best_estimator = None
             best_params = None
+            best_cv_score = 0.0
+            best_test_score = 0.0
             while True:  # loop for recursive feature elimination (RFE)
                 # Because of a bug in joblib, we see a lot of warnings here.
                 # https://github.com/scikit-learn/scikit-learn/issues/6370
@@ -355,6 +366,8 @@ def main():
                 grid.fit(x_train_selected, y_train)  # perform the classification training
                 if not best_estimator:  # train the estimator for the first time
                     best_estimator = grid.best_estimator_  # now the estimator is trained and optimized
+                    best_cv_score = grid.best_score_
+                    best_test_score = grid.score(x_test, y_test)
                     y_predict = best_estimator.predict(x_test)  # predict the test data set
 
                 rfe_estimator = grid.best_estimator_  # estimator used for RFE
@@ -365,7 +378,7 @@ def main():
                 test_score = rfe_estimator.score(x_test[:, surviving_features], y_test)
                 rfe_y_predict = rfe_estimator.predict(x_test[:, surviving_features])
                 rfe_row = {}
-                output_aha_result(rfe_row, y_test, rfe_y_predict, label_encoder, x_rhythm_types)
+                output_aha_result(rfe_row, x_test_idx, y_test, rfe_y_predict, label_encoder, x_rhythm_types)
                 output_multiclass_result(rfe_row, x_test_idx, y_test, rfe_y_predict, label_encoder, x_rhythm_types)
                 print("cv_score:", cv_score, ", test_score:", test_score)
                 print("\n".join(["\t{0} = {1}".format(field, rfe_row.get(field, 0.0)) for field in csv_fields[1:]]))
@@ -390,10 +403,14 @@ def main():
                 predict_results[included_idx, it - 1] = y_predict  # remember prediction results of all included samples
 
             # report the performance of final AHA classification
-            output_aha_result(row, y_test, y_predict, label_encoder, x_rhythm_types)
+            output_aha_result(row, x_test_idx, y_test, y_predict, label_encoder, x_rhythm_types)
             output_multiclass_result(row, x_test_idx, y_test, y_predict, label_encoder, x_rhythm_types)
+            # best scores
+            row["cv_score"] = best_cv_score
+            row["testing_score"] = best_test_score
             # store best parameters of grid search
             output_best_params(row, best_params)
+            # feature importance / ranking
             output_feature_scores(row, best_estimator, selected_feature_names)
 
             rows.append(row)  # remember each row so we can calculate average for them later

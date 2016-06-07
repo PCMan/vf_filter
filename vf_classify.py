@@ -18,7 +18,8 @@ SHOCKABLE = 1
 INTERMEDIATE = 2
 aha_classes = (NON_SHOCKABLE, SHOCKABLE, INTERMEDIATE)
 aha_classe_names = ["non-shockable", "shockable", "intermediate"]
-shockable_rhythms = ("(VF,coarse", "(VF,fine", "(VT,rapid", "(VT,slow")
+shockable_rhythms = ("(VF,coarse", "(VT,rapid")
+intermediate_rhythms = ("(VF,fine", "(VT,slow")
 
 # Use threshold value: 180 BPM to define rapid VT
 # Reference: Nishiyama et al. 2015. Diagnosis of Automated External Defibrillators (JAHA)
