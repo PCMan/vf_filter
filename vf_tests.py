@@ -62,6 +62,7 @@ def create_csv_fields(estimator_name, select_feature_names, label_encoder, param
 def output_multiclass_result(row, x_test_idx, y_test, y_predict, label_encoder, x_rhythm_types):
     results = vf_eval.MultiClassificationResult(y_test, y_predict, classes=vf_classify.aha_classes).results
     for class_name, result in zip(vf_classify.aha_classe_names, results):
+        print("class:", class_name, "tp=", result.tp, "tn=", result.tn, "fp=", result.fp, "fn=", result.fn, "total=", len(y_test))
         row["Se[{0}]".format(class_name)] = result.sensitivity
         row["Sp[{0}]".format(class_name)] = result.specificity
         row["precision[{0}]".format(class_name)] = result.precision
@@ -104,7 +105,11 @@ def output_aha_result(row, x_test_idx, y_test, y_predict, label_encoder, x_rhyth
     # now we only have SHOCKABLE and NON_SHOCKABLE in the test and predicted data
     binary_y_test = y_test[exclude_intermediate_mask]
     binary_y_predict = y_predict[exclude_intermediate_mask]
+    # When evaluating AHA binary classification, the labels are: "shock" and "no shock"
+    # So when a sample is predicted as intermediate, encode it to "no shock"
+    binary_y_predict[binary_y_predict == vf_classify.INTERMEDIATE] = vf_classify.NON_SHOCKABLE
     results = vf_eval.BinaryClassificationResult(binary_y_test, binary_y_predict)
+    print("AHA:", "tp=", results.tp, "tn=", results.tn, "fp=", results.fp, "fn=", results.fn, "total=", len(binary_y_test))
     row["AHA_Se[shockable]"] = results.sensitivity
     row["AHA_Sp[non_shockable]"] = results.specificity
     row["AHA_precision[shockable]"] = results.precision
@@ -329,7 +334,7 @@ def main():
             data_scaler = preprocessing.MinMaxScaler(feature_range=(-1, 1), copy=False)
             data_scaler.fit_transform(x_train)
             data_scaler.transform(x_test)  # the test dataset should be scaled by the same factor
-            
+
             fit_params = None
             # try to balance class weighting
             if class_weight == "balanced" and not support_class_weight:

@@ -11,6 +11,8 @@ scorer_names = ("ber", "f1", "accuracy", "precision", "f1_weighted",
                 "f1_macro", "f1_binary")
 
 
+# before calling this class, all data labels should only contain 1 or 0.
+# otherwise there will be errors.
 class BinaryClassificationResult:
     def __init__(self, y_true, y_predict):
         correct = (y_true == y_predict)
