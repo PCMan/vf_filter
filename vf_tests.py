@@ -324,10 +324,12 @@ def main():
             x_test = x_data[x_test_idx]
             x_test_info = x_data_info[x_test_idx]
 
-            # scale the features (NOTE: training and testing sets should be scaled separately.)
-            preprocessing.scale(x_train, copy=False)
-            preprocessing.scale(x_test, copy=False)
-
+            # scale the features (NOTE: training and testing sets should be scaled by the same factor.)
+            # scale to [-1, 1] (or scale to [0, 1]. scaling is especially needed by SVM)
+            data_scaler = preprocessing.MinMaxScaler(feature_range=(-1, 1), copy=False)
+            data_scaler.fit_transform(x_train)
+            data_scaler.transform(x_test)  # the test dataset should be scaled by the same factor
+            
             fit_params = None
             # try to balance class weighting
             if class_weight == "balanced" and not support_class_weight:

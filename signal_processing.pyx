@@ -88,6 +88,7 @@ cpdef double get_amplitude(np.ndarray[double, ndim=1] samples, int sampling_rate
         valley_idx = next_valley_idx
 
     if plot:
+        plot.plot(samples, color="k")
         plot.plot(peak_indices, samples[peak_indices], color="b", marker="o", linestyle="")
         plot.plot(valley_indices, samples[valley_indices], color="g", marker="o", linestyle="")
     return max_amplitude
