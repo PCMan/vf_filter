@@ -271,6 +271,7 @@ class VfClassifier:
 
         for it in range(n_iters):
             x_train_selected = x_train[:, selected_features_mask]
+            print("n_selected_features:", np.sum(selected_features_mask))
             # scale the features (NOTE: training and testing sets should be scaled by the same factor.)
             # scale to [-1, 1] (or scale to [0, 1]. scaling is especially needed by SVM)
             data_scaler = preprocessing.MinMaxScaler(feature_range=(-1, 1), copy=True)
