@@ -21,7 +21,7 @@ def create_csv_fields(classifier, select_feature_names, label_encoder, perform_r
         csv_fields.append("best_fs_iter")  # feature selection iteration that achieves the best scores
 
     # fields for reporting AHA performance results
-    csv_fields.extend(["AHA_Se[shockable]", "AHA_Sp[non_shockable]", "AHA_precision[shockable]"])
+    csv_fields.extend(["AHA_Se[shockable]", "AHA_Sp[non_shockable]", "AHA_precision[shockable]", "AHA_accuracy[shockable]"])
     for class_name in label_encoder.classes_:
         if class_name in vf_classify.shockable_rhythms:  # shockable rhythms
             csv_fields.append("AHA_Se[{0}]".format(class_name))
@@ -32,7 +32,7 @@ def create_csv_fields(classifier, select_feature_names, label_encoder, perform_r
 
     # fields for detailed multi-class results
     for class_name in vf_classify.aha_classe_names:
-        csv_fields.extend(["{0}[{1}]".format(field, class_name) for field in ("Se", "Sp", "precision")])
+        csv_fields.extend(["{0}[{1}]".format(field, class_name) for field in ("Se", "Sp", "precision", "accuracy")])
     for class_name in label_encoder.classes_:
         # report sensitivity for shockable rhythms or intermediate rhythms
         if class_name in vf_classify.shockable_rhythms or class_name in vf_classify.intermediate_rhythms:
@@ -63,6 +63,7 @@ def output_multiclass_result(row, x_test_idx, y_test, y_predict, label_encoder, 
         row["Se[{0}]".format(class_name)] = result.sensitivity
         row["Sp[{0}]".format(class_name)] = result.specificity
         row["precision[{0}]".format(class_name)] = result.precision
+        row["accuracy[{0}]".format(class_name)] = result.accuracy
 
     # report performance for each rhythm type (suggested by AHA guideline for AED development)
     for rhythm_id, rhythm_name in enumerate(label_encoder.classes_):
@@ -110,6 +111,7 @@ def output_aha_result(row, x_test_idx, y_test, y_predict, label_encoder, x_rhyth
     row["AHA_Se[shockable]"] = results.sensitivity
     row["AHA_Sp[non_shockable]"] = results.specificity
     row["AHA_precision[shockable]"] = results.precision
+    row["AHA_accuracy[shockable]"] = results.accuracy
     binary_y_test_rhythm_types = y_test_rhythm_types[exclude_intermediate_mask]  # exclude the intermediate class
 
     # FIXME: How to report performance for intermediate class?
