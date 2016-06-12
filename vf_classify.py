@@ -3,6 +3,7 @@ import pyximport; pyximport.install()
 import numpy as np
 from sklearn import preprocessing
 from sklearn import ensemble
+from sklearn import grid_search
 from sklearn import metrics
 import vf_eval
 
@@ -188,3 +189,150 @@ def create_estimator(estimator_name, class_weight):
         estimator = mlp.Classifier(layers=layers, batch_size=150)
 
     return estimator, param_grid, support_class_weight
+
+
+class VfClassifier:
+    def __init__(self, estimator_name="svc_rbf", n_cv_folds=5, scorer="f1_macro",
+                 class_weight="balanced", filter_fs_order=None, perform_rfe=True, n_jobs=-1):
+        self.estimator_name = estimator_name
+        self.n_cv_folds = n_cv_folds
+        self.scorer = scorer
+        self.class_weight = class_weight
+        self.n_jobs = n_jobs
+        estimator, param_grid, support_class_weight = create_estimator(estimator_name, class_weight)
+        self.estimator = estimator
+        self.param_grid = param_grid
+        self.support_class_weight = support_class_weight
+
+        self.filter_fs_order = filter_fs_order  # list features for filter type feature selection in order of elimination
+        if filter_fs_order:  # RFE and filter type FS cannot be performed at the same time
+            perform_rfe = False
+        self.perform_rfe = perform_rfe  # perform recursive feature elimination (RFE) and get feature ranks
+
+        # results of each iterations
+        self.data_scalers = []
+        self.estimators = []
+        self.params = []
+        self.cv_scores = []
+        self.best_iter = -1
+        self.selected_feature_masks = []  # masks for selected features in each iteration
+        self.eliminated_features = []
+
+    def reset(self):
+        if self.best_iter != -1:  # clear previous trained results:
+            self.estimators = []
+            self.params = []
+            self.cv_scores = []
+            self.best_iter = -1
+            self.selected_feature_masks = []  # masks for selected features in each iteration
+            self.eliminated_features = []
+            self.data_scalers = []
+
+    def set_filter_fs_order(self, filter_fs_order):
+        self.reset()
+        self.filter_fs_order = filter_fs_order
+
+    def train(self, x_train, y_train):
+        self.reset()
+
+        fit_params = None
+        # try to balance class weighting
+        if self.class_weight == "balanced" and not self.support_class_weight:
+            # perform sample weighting instead if the estimator does not support class weighting
+            weight_arg = "w" if self.estimator_name.startswith("mlp") else "sample_weight"
+            fit_params = {
+                weight_arg: np.array(get_balanced_sample_weights(y_train))
+            }
+
+        n_features = x_train.shape[1]
+        selected_features_mask = np.ones(n_features, dtype=np.bool)
+        # number of iterations
+        if self.perform_rfe:
+            n_iters = n_features
+        elif self.filter_fs_order:
+            n_iters = len(self.filter_fs_order)
+        else:
+            n_iters = 1
+
+        # find best parameters using grid search + cross validation
+        grid = grid_search.GridSearchCV(self.estimator,
+                                        self.param_grid,
+                                        fit_params=fit_params,
+                                        scoring=self.scorer,
+                                        n_jobs=self.n_jobs,
+                                        cv=self.n_cv_folds,
+                                        verbose=0)
+        best_score = 0.0
+        # Because of a bug in joblib, we see a lot of warnings here.
+        # https://github.com/scikit-learn/scikit-learn/issues/6370
+        # Use the workaround to turn off the warnings
+        import warnings
+        warnings.filterwarnings("ignore")
+
+        for it in range(n_iters):
+            x_train_selected = x_train[:, selected_features_mask]
+            # scale the features (NOTE: training and testing sets should be scaled by the same factor.)
+            # scale to [-1, 1] (or scale to [0, 1]. scaling is especially needed by SVM)
+            data_scaler = preprocessing.MinMaxScaler(feature_range=(-1, 1), copy=True)
+            x_train_selected = data_scaler.fit_transform(x_train_selected)
+            self.data_scalers.append(data_scaler)
+            grid.fit(x_train_selected, y_train)  # training the model
+            estimator = grid.best_estimator_
+            self.estimators.append(estimator)
+            self.cv_scores.append(grid.best_score_)
+            self.params.append(grid.best_params_)
+            self.selected_feature_masks.append(np.copy(selected_features_mask))  # need to copy the array
+            if grid.best_score_ > best_score:
+                best_score = grid.best_score_
+                self.best_iter = it
+
+            eliminated_feature_idx = -1
+            if self.perform_rfe:  # perform recursive feature elimination (eliminate the least important feature)
+                # find the worst feature in this round (lowest score/coefficient)
+                if hasattr(estimator, 'coef_'):
+                    coefs = estimator.coef_
+                elif hasattr(estimator, 'feature_importances_'):
+                    coefs = estimator.feature_importances_
+                else:  # no feature importance scores for ranking.
+                    break  # FIXME: we should raise an exception here
+                feature_importance = coefs ** 2
+                if coefs.ndim > 1:
+                    feature_importance = feature_importance.sum(axis=0)
+                i_min_score = np.argmin(feature_importance)  # find worst feature
+                feature_ids = np.flatnonzero(selected_features_mask)
+                print("eliminate", feature_ids, i_min_score)
+                eliminated_feature_idx = feature_ids[i_min_score]  # find worst feature
+            elif self.filter_fs_order:  # perform filter type feature selection
+                eliminated_feature_idx = self.filter_fs_order[it]
+            if eliminated_feature_idx != -1:
+                selected_features_mask[eliminated_feature_idx] = False
+                self.eliminated_features.append(eliminated_feature_idx)
+
+    def predict(self, x_test, y_test=None, i_estimator=-1, predict=True, score=True):
+        if i_estimator == -1:  # the estimator to use is not specified
+            i_estimator = self.best_iter  # use the best one automatically
+        if i_estimator == -1:  # do not have any trained estimators, need to call train() first.
+            return None
+        selected_features_mask = self.selected_feature_masks[i_estimator]
+        x_test_selected = x_test[:, selected_features_mask]  # only select some dimensions
+        estimator = self.estimators[i_estimator]
+        data_scaler = self.data_scalers[i_estimator]
+
+        # the test dataset should be scaled by the same factor
+        x_test_selected = data_scaler.transform(x_test_selected)
+        if predict:
+            y_predict = estimator.predict(x_test_selected)
+        else:
+            y_predict = None
+
+        if score:
+            test_score = estimator.score(x_test_selected, y_test)
+        else:
+            test_score = 0.0
+        return y_predict, test_score
+
+    def has_coefficients(self):
+        return self.estimator_name in ("logistic_regression", "svc_linear")
+
+    def has_feature_importances(self):
+        return self.estimator_name in ("random_forest", "adaboost", "gradient_boosting")
