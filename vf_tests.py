@@ -319,7 +319,7 @@ def main(args):
                 n_left_features = args.svm_rfe_filter_fs
                 n_to_eliminate = len(selected_features) - n_left_features
                 filter_fs_order = svm_rfe_classifier.eliminated_features[0:n_to_eliminate]
-                classifier.set_filter_fs_order(svm_rfe_classifier.eliminated_features)
+                classifier.set_filter_fs_order(filter_fs_order)
 
             classifier.train(x_train, y_train)  # training the classifier
             y_predict, test_score = classifier.predict(x_test, y_test)  # prediction on the test data set
