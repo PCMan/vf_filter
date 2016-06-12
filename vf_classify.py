@@ -193,7 +193,7 @@ def create_estimator(estimator_name, class_weight):
 
 class VfClassifier:
     def __init__(self, estimator_name="svc_rbf", n_cv_folds=5, scorer="f1_macro",
-                 class_weight="balanced", filter_fs_order=None, perform_rfe=True, n_jobs=-1):
+                 class_weight="balanced", filter_fs_order=None, n_rfe_iters=0, n_jobs=-1):
         self.estimator_name = estimator_name
         self.n_cv_folds = n_cv_folds
         self.scorer = scorer
@@ -206,8 +206,8 @@ class VfClassifier:
 
         self.filter_fs_order = filter_fs_order  # list features for filter type feature selection in order of elimination
         if filter_fs_order:  # RFE and filter type FS cannot be performed at the same time
-            perform_rfe = False
-        self.perform_rfe = perform_rfe  # perform recursive feature elimination (RFE) and get feature ranks
+            n_rfe_iters = 0
+        self.n_rfe_iters = n_rfe_iters  # perform recursive feature elimination (RFE) and get feature ranks
 
         # results of each iterations
         self.data_scalers = []
@@ -247,8 +247,8 @@ class VfClassifier:
         n_features = x_train.shape[1]
         selected_features_mask = np.ones(n_features, dtype=np.bool)
         # number of iterations
-        if self.perform_rfe:
-            n_iters = n_features
+        if self.n_rfe_iters:
+            n_iters = self.n_rfe_iters
         elif self.filter_fs_order:
             n_iters = len(self.filter_fs_order)
         else:
@@ -287,7 +287,7 @@ class VfClassifier:
                 self.best_iter = it
 
             eliminated_feature_idx = -1
-            if self.perform_rfe:  # perform recursive feature elimination (eliminate the least important feature)
+            if self.n_rfe_iters:  # perform recursive feature elimination (eliminate the least important feature)
                 # find the worst feature in this round (lowest score/coefficient)
                 if hasattr(estimator, 'coef_'):
                     coefs = estimator.coef_
