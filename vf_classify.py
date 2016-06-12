@@ -305,7 +305,7 @@ class VfClassifier:
                 eliminated_feature_idx = feature_ids[i_min_score]  # find worst feature
             elif self.filter_fs_order:  # perform filter type feature selection
                 eliminated_feature_idx = self.filter_fs_order[it]
-                print("filter_fs:", it, feature_ids, i_min_score)
+                print("filter_fs:", it, eliminated_feature_idx)
             if eliminated_feature_idx != -1:
                 selected_features_mask[eliminated_feature_idx] = False
                 self.eliminated_features.append(eliminated_feature_idx)
