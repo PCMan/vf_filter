@@ -343,7 +343,7 @@ def main(args):
             row["testing_score"] = test_score
 
             # remember in which round of feature selection we get the best scores
-            if len(classifiers.estimators) > 1:
+            if len(classifier.estimators) > 1:
                 row["best_fs_iter"] = i_best_estimator
 
             # store best parameters of grid search
