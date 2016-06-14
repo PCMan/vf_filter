@@ -236,9 +236,6 @@ def main(args):
     if args.unbalanced_weight:
         class_weight = None
 
-    # build scoring function
-    cv_scorer = vf_eval.get_scorer(args.scorer)
-
     # load features
     x_data, x_data_info = load_features(args.input)
 
@@ -271,7 +268,7 @@ def main(args):
     # build the classifier use for VF detection
     classifier = vf_classify.VfClassifier(estimator_name=estimator_name,
                                           n_cv_folds=n_cv_folds,
-                                          scorer=cv_scorer,
+                                          scorer=args.scorer,
                                           class_weight=class_weight,
                                           n_rfe_iters=args.n_rfe_iters,
                                           n_jobs=n_jobs)
@@ -282,7 +279,7 @@ def main(args):
         n_to_eliminate = len(selected_features) - args.svm_rfe_filter_fs
         svm_rfe_classifier = vf_classify.VfClassifier(estimator_name="svc_linear",
                                                       n_cv_folds=n_cv_folds,
-                                                      scorer=cv_scorer,
+                                                      scorer=args.scorer,
                                                       class_weight=class_weight,
                                                       n_rfe_iters=n_to_eliminate,
                                                       n_jobs=n_jobs)

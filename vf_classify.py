@@ -196,7 +196,8 @@ class VfClassifier:
                  class_weight="balanced", filter_fs_order=None, n_rfe_iters=0, n_jobs=-1):
         self.estimator_name = estimator_name
         self.n_cv_folds = n_cv_folds
-        self.scorer = scorer
+        self.scorer_name = scorer
+        self.scorer = vf_eval.get_scorer(scorer)  # build scoring function
         self.class_weight = class_weight
         self.n_jobs = n_jobs
         estimator, param_grid, support_class_weight = create_estimator(estimator_name, class_weight)
@@ -328,7 +329,7 @@ class VfClassifier:
             y_predict = None
 
         if score:
-            test_score = estimator.score(x_test_selected, y_test)
+            test_score = self.scorer(estimator, x_test_selected, y_test)
         else:
             test_score = 0.0
         return y_predict, test_score
