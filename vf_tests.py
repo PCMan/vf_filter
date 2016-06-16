@@ -252,7 +252,7 @@ def main(args):
         x_data, x_data_info = vf_classify.exclude_rhythms(x_data, x_data_info, args.exclude_rhythms)
 
     # label the samples for AHA AED recommendation based multiclass scheme
-    aha_y_data = vf_classify.initialize_aha_labels(x_data, x_data_info)
+    aha_y_data = vf_classify.initialize_aha_labels(x_data_info)
 
     # encode differnt types of rhythm names into numeric codes for stratified sampling later
     y_rhythm_names = [info.rhythm for info in x_data_info]

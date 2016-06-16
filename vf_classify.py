@@ -34,10 +34,9 @@ estimator_names = ("logistic_regression", "random_forest", "adaboost", "gradient
 
 # Generate y labels for each input data point according to AHA classification scheme
 # After calling this function, the "rhythm" fields of some x_data_info elements will be modified.
-def initialize_aha_labels(x_data, x_data_info):
+def initialize_aha_labels(x_data_info):
     y_data = np.zeros(len(x_data_info), dtype="int")
-    for i in range(len(x_data)):
-        x = x_data[i]
+    for i in range(len(x_data_info)):
         info = x_data_info[i]
         rhythm = info.rhythm
         # distinguish subtypes of VT and VF
