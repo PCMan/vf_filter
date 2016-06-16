@@ -93,7 +93,7 @@ def plot_sample(info, signals):
     ax = axes[3, 0]
     ax.set_title("Butterworth high pass filter (cutoff: 30Hz)")
     ax.plot(signals)
-    ax.axhline(y=0.2, color="r")  # draw a horizontal line at 0.2
+    # ax.axhline(y=0.2, color="r")  # draw a horizontal line at 0.2
 
     # plot DFT spectrum
     fft = np.fft.fft(signals * sp.signal.hamming(n_samples))
