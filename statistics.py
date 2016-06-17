@@ -90,9 +90,11 @@ def main():
 
     for info in x_data_info:
         db_name = info.record_name.split("/", maxsplit=1)[0]
-        if args.db_names and (db_name not in args.db_names):
-            continue
         rhythm_name = info.rhythm
+        if args.db_names and (db_name not in args.db_names):
+            rhythm_statistics.setdefault(rhythm_name, 0)
+            case_statistics.setdefault(rhythm_name, set())
+            continue
         rhythm_statistics[rhythm_name] = rhythm_statistics.get(rhythm_name, 0) + 1
         case_statistics.setdefault(rhythm_name, set()).add(info.record_name)
         n_segments += 1
