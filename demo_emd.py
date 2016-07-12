@@ -11,9 +11,9 @@ def main():
     y2 = np.sin(x / 2)
     y3 = np.sin(x / 4)
     y = y1 + y2 + y3
-    f, ax = plt.subplots(4, 1, sharex=True)
+    f, ax = plt.subplots(4, 1, sharex=True, sharey=True)
     ax[0].plot(x, y, color="k")
-    ax[0].set_title("Original Signal")
+    ax[0].set_title("Original Signal", fontsize=22)
     
     ue = emd._get_upper_spline(y)
     le = -emd._get_upper_spline(-y)
@@ -22,15 +22,15 @@ def main():
     ax[1].plot(x, le, color="g", linestyle="-")
     avg = (ue + le) / 2
     ax[1].plot(x, avg, color="b", linestyle="-")
-    ax[1].set_title("Calculate Mean of Upper and Lower Envolopes")
+    ax[1].set_title("Calculate Mean of Upper and Lower Envolopes", fontsize=22)
     
     imf1 = y - avg
     ax[2].plot(x, imf1, color="k")
-    ax[2].set_title("Intrinsic Mode Function (IMF) = Original Signal - Mean")
+    ax[2].set_title("Intrinsic Mode Function (IMF) = Original Signal - Mean", fontsize=22)
 
     res = y - imf1
     ax[3].plot(x, res, color="k")
-    ax[3].set_title("Residual = Original Signal - IMF")
+    ax[3].set_title("Residual = Original Signal - IMF", fontsize=22)
 
     plt.show()
 
